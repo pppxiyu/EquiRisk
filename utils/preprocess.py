@@ -20,7 +20,7 @@ import contextily as cx
 
 
 # preprocess incident data
-def rawData(address = './data/ambulance/virginiaBeach_ambulance_timeData.csv'):
+def rawData(address='./data/ambulance/virginiaBeach_ambulance_timeData.csv'):
     data = pd.read_csv(address)
 
     data['CallDateTime'] = pd.to_datetime(data['Call Date and Time'], format = "%Y-%m-%d %H:%M:%S")
@@ -194,6 +194,17 @@ def getWaterDepthOnRoads(roads, inundationAddress, inundationCutSaveAddress):
         .apply(lambda x: _getMaxWaterDepth(x, inundation_cutByRoads), axis = 1, raw = True).replace(-inundation.nodata, 0)   
     return roads
 
+def reLoadRoads(addr):
+    addrSplit = addr.split('.shp')
+    roads = gpd.read_file(addr)
+    roads['line'] = gpd.read_file(addrSplit[0] + '_line.shp').geometry
+    roads['midpoint'] = gpd.read_file(addrSplit[0] + '_midpoint.shp').geometry
+    roads['buffers'] = gpd.read_file(addrSplit[0] + '_buffers.shp').geometry
+    roads['buffersUnscaled'] = gpd.read_file(addrSplit[0] + '_buffersUnscaled.shp').geometry
+    roads = roads.rename(columns = {'geometry': 'surface', 'scaledRadi': 'scaledRadius'})
+    roads = roads.set_geometry('surface')
+    return roads
+
 # visualzation
 def showRoadsInundation(inundation):
     fig = plt.figure(figsize = (100, 50))
@@ -274,7 +285,7 @@ def roads2Graph(roads):
     return graph
 
 # read rescue
-def readRescue(rescueAddress, crs):
+def readRescue(rescueAddress, crs, roads):
     rescue = pd.read_csv(rescueAddress) 
     rescue = gpd.GeoDataFrame(rescue, geometry = gpd.points_from_xy(rescue['lon'], rescue['lat'])).set_crs(crs).to_crs(roads.crs) 
     rescue['OBJECTID_nearestRoad'] = rescue.geometry.apply(lambda x: x.distance(roads.line).sort_values().index[0] + 1)    

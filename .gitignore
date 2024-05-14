@@ -1,0 +1,9 @@
+.idea/
+__pycache__/
+data/
+outputs/
+manuscripts/
+presentations/
+fig/
+.ipynb_checkpoints/
+
