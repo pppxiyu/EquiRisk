@@ -3,8 +3,6 @@ import pandas as pd
 import geopandas as gpd
 import geopy as gpy
 from geopy.extra.rate_limiter import RateLimiter
-import plotly.express as px
-import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 from collections import OrderedDict
 import rasterio
@@ -15,20 +13,18 @@ from shapely.geometry import Polygon, Point
 import warnings
 import momepy
 import libpysal
-import math
 import contextily as cx
 
 
-# preprocess incident data
-def rawData(address='./data/ambulance/virginiaBeach_ambulance_timeData.csv'):
+def incidents_add_time_addr(address):
     data = pd.read_csv(address)
 
-    data['CallDateTime'] = pd.to_datetime(data['Call Date and Time'], format = "%Y-%m-%d %H:%M:%S")
-    data['EntryDateTime'] = pd.to_datetime(data['Entry Date and Time'], format = "%Y-%m-%d %H:%M:%S")
-    data['DispatchDateTime'] = pd.to_datetime(data['Dispatch Date and Time'], format = "%Y-%m-%d %H:%M:%S")
-    data['EnRouteDateTime'] = pd.to_datetime(data['En route Date and Time'], format = "%Y-%m-%d %H:%M:%S")
-    data['OnSceneDateTime'] = pd.to_datetime(data['On Scene Date and Time'], format = "%Y-%m-%d %H:%M:%S")
-    data['CloseDateTime'] = pd.to_datetime(data['Close Date and Time'], format = "%Y-%m-%d %H:%M:%S")
+    time_cols = [
+        'Call Date and Time', 'Entry Date and Time', 'Dispatch Date and Time',
+        'En route Date and Time', 'On Scene Date and Time', 'Close Date and Time',
+    ]
+    for col in time_cols:
+        data[col] = pd.to_datetime(data[col], format = "%Y-%m-%d %H:%M:%S")
 
     data['Country'] = 'USA'
     data['Address'] = data['Block Address'].str.cat([
@@ -40,29 +36,31 @@ def rawData(address='./data/ambulance/virginiaBeach_ambulance_timeData.csv'):
         data['Country']
     ], join="left")
 
-    data['DispatchTime'] = (data['DispatchDateTime'] - data['CallDateTime']).astype("timedelta64[s]")
-    data['EnRouteTime'] = (data['EnRouteDateTime'] - data['CallDateTime']).astype("timedelta64[s]")
-    data['TravelTime'] = (data['OnSceneDateTime'] - data['EnRouteDateTime']).astype("timedelta64[s]")
-    data['ResponseTime'] = (data['OnSceneDateTime'] - data['CallDateTime']).astype("timedelta64[s]")
-    data['HourInDay'] = data['CallDateTime'].dt.hour
-    data['DayOfWeek'] = data['CallDateTime'].dt.dayofweek
+    data['DispatchTime'] = (data['Dispatch Date and Time'] - data['Call Date and Time']).astype("timedelta64[s]")
+    data['EnRouteTime'] = (data['En route Date and Time'] - data['Call Date and Time']).astype("timedelta64[s]")
+    data['TravelTime'] = (data['On Scene Date and Time'] - data['En route Date and Time']).astype("timedelta64[s]")
+    data['ResponseTime'] = (data['En route Date and Time'] - data['Call Date and Time']).astype("timedelta64[s]")
+    data['HourInDay'] = data['Call Date and Time'].dt.hour
+    data['DayOfWeek'] = data['Call Date and Time'].dt.dayofweek
     
     return data
 
-def addOrigin(data, rescueAddress):
-    rescue = pd.read_csv(rescueAddress) 
-    rescue = gpd.GeoDataFrame(rescue, geometry = gpd.points_from_xy(rescue['lon'], rescue['lat']))
+
+def incidents_add_origin(data, rescue_address):
+    rescue = pd.read_csv(rescue_address)
+    rescue = gpd.GeoDataFrame(rescue, geometry=gpd.points_from_xy(rescue['lon'], rescue['lat']))
     data = data[data['Rescue Squad Number'].isin(rescue.Number.to_list())]
-    data = data.merge(rescue, how = 'left', left_on = 'Rescue Squad Number', right_on = 'Number')
+    data = data.merge(rescue, how='left', left_on='Rescue Squad Number', right_on='Number')
     
     data = gpd.GeoDataFrame(data)
-    data = data.set_index('CallDateTime')
+    data = data.set_index('Call Date and Time')
     data = data.sort_index()
     
-    data['geometry'] = gpd.GeoSeries(data['geometry'], crs = 'EPSG:4326', index = data.index)
+    data['geometry'] = gpd.GeoSeries(data['geometry'], crs='EPSG:4326', index=data.index)
     return data
 
-def _organizeData(data):
+
+def _organize_data(data):
     data['CallDateTime'] = data.index
     data = data.reset_index(drop = True)
     data = data.loc[:, [
@@ -78,31 +76,38 @@ def _organizeData(data):
     data.set_geometry("IncidentPoint")
     return data
 
-def geoCoding(data, saveAddress):
+
+def incidents_geo_coding(data, save_addr):
     locator = gpy.geocoders.ArcGIS()
-    geocode = RateLimiter(locator.geocode, min_delay_seconds = 0.1)
+    geocode = RateLimiter(locator.geocode, min_delay_seconds=0.1)
 
     data['IncidentFullInfo'] = data['Address'].apply(geocode)
     data['IncidentCoor'] = data['IncidentFullInfo'].apply(lambda loc: tuple(loc.point) if loc else None)
     data['IncidentFullInfo'] = data['IncidentFullInfo'].astype(str)
-    data[['IncidentLat', 'IncidentLon', 'IncidentElevation']] = pd.DataFrame(data['IncidentCoor'].tolist(), index = data.index)
-    data['IncidentPoint'] = gpd.GeoSeries(gpd.points_from_xy(y = data.IncidentLat, x = data.IncidentLon), index = data.index, crs = "EPSG:4326")
+    data[['IncidentLat', 'IncidentLon', 'IncidentElevation']] = pd.DataFrame(
+        data['IncidentCoor'].tolist(), index=data.index,
+    )
+    data['IncidentPoint'] = gpd.GeoSeries(gpd.points_from_xy(
+        y=data.IncidentLat, x=data.IncidentLon
+    ), index=data.index, crs="EPSG:4326")
     
-    data = _organizeData(data)
-    data.to_csv(saveAddress, index = False)
+    data = _organize_data(data)
+    data.to_csv(save_addr, index=False)
     return data
 
-def _string2Points(data, column, crs, index):
+
+def _string_2_points(data, column, crs, index):
     x = [float(location.replace('POINT (', '').replace(')', '').split(' ')[0]) for location in list(data[column].values)]
     y = [float(location.replace('POINT (', '').replace(')', '').split(' ')[1]) for location in list(data[column].values)]
     return gpd.GeoSeries(gpd.points_from_xy(x = x, y = y), crs = crs, index = index)
 
-def reLoadData(address):
+
+def reload_incidents(address):
     data = pd.read_csv(address, index_col = 'CallDateTime')
     data.index = pd.to_datetime(data.index, format = "%Y-%m-%d %H:%M:%S")
     data = gpd.GeoDataFrame(data)
-    data['RescueSquadPoint'] = _string2Points(data, 'RescueSquadPoint', "EPSG:4326", data.index)
-    data['IncidentPoint'] = _string2Points(data, 'IncidentPoint', "EPSG:4326", data.index)
+    data['RescueSquadPoint'] = _string_2_points(data, 'RescueSquadPoint', "EPSG:4326", data.index)
+    data['IncidentPoint'] = _string_2_points(data, 'IncidentPoint', "EPSG:4326", data.index)
     return data
     
 
@@ -118,6 +123,7 @@ def _moveDuplicates(joined):
         duOne = du[du.aveWidth == du.aveWidth.max()]
         joined_noDuplicates = pd.concat([joined_noDuplicates, duOne])
     return joined_noDuplicates.sort_values(by = ['OBJECTID_left'])
+
 
 def _createSurface4roads(roads, roadSurfaces):
     # USE: create a geoDataFrame containing the column of average width and full polygon (might include multiple road segments) for each road
@@ -141,12 +147,14 @@ def _createSurface4roads(roads, roadSurfaces):
     joined_updated = joined_updated.set_geometry('surfacePolygon').set_crs(roadSurfaces.crs)
     return joined_updated
 
+
 def readRoads(roadAddress):
     roads = gpd.read_file(roadAddress)
     roads = roads.loc[-roads['geometry'].duplicated(), :]
     roads['OBJECTID'] = list(range(1, len(roads) + 1))
     roads = roads.reset_index(drop = True)
     return roads
+
 
 def makeSurface4Lines(roads, surfaceAddress, scale = 2.7):
     roadSurfaces = gpd.read_file(surfaceAddress)
@@ -164,6 +172,7 @@ def makeSurface4Lines(roads, surfaceAddress, scale = 2.7):
     roads = roads.set_geometry('surface', crs = roadSurfaces.crs)
     return roads
 
+
 def _inundationCutter(inundation, cut, all_touched, invert, addr = './data/inundation/croppedByBridge/croppedByBridge.tif'):
     if inundation.crs != cut.crs:
         return 'crs not consistent'
@@ -177,6 +186,7 @@ def _inundationCutter(inundation, cut, all_touched, invert, addr = './data/inund
     inundation_cropped.write(out_array)
     return inundation_cropped
 
+
 def _getMaxWaterDepth(roadGeometry, inundation):
     # roadGeometry should be series, inundation is raster
     with warnings.catch_warnings():
@@ -185,16 +195,18 @@ def _getMaxWaterDepth(roadGeometry, inundation):
         inundationOnRoad = np.where(inundationOnRoad == inundation.nodata, - inundationOnRoad, inundationOnRoad)
     return np.max(inundationOnRoad)
 
-def getWaterDepthOnRoads(roads, inundationAddress, inundationCutSaveAddress):
-    inundation = rasterio.open(inundationAddress)
+
+def getWaterDepthOnRoads(roads, inundation_address, inundation_cut_save_address):
+    inundation = rasterio.open(inundation_address)
     roads_updated_4getInundation = roads.copy().to_crs(str(inundation.crs))
-    inundation_cutByRoads = _inundationCutter(inundation, roads_updated_4getInundation, False, False, inundationCutSaveAddress)
+    inundation_cutByRoads = _inundationCutter(inundation, roads_updated_4getInundation, False, False, inundation_cut_save_address)
 
     roads['waterDepth'] = roads_updated_4getInundation.loc[:, ['surface']] \
         .apply(lambda x: _getMaxWaterDepth(x, inundation_cutByRoads), axis = 1, raw = True).replace(-inundation.nodata, 0)   
     return roads
 
-def reLoadRoads(addr):
+
+def reload_roads(addr):
     addrSplit = addr.split('.shp')
     roads = gpd.read_file(addr)
     roads['line'] = gpd.read_file(addrSplit[0] + '_line.shp').geometry
