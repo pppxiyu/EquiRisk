@@ -1,6 +1,84 @@
 import networkx as nx
 import math
 import numpy as np
+import arcpy
+
+
+def init_service_area_analysis_arcgis(nd_layer_name, rescue_station, cutoff_time: list):
+
+    note = """
+        MANUAL OPERATION: go to the network dataset under the feature dataset. Right click the nd, and 
+        add a new travel mode called 'DriveTime' manually. This step must be finished in the UI, as the 
+        travel mode attribute of nd is set as read-only. Esri does not support adding a travel mode from 
+        scrtach to nd yet. Ref: https://community.esri.com/t5/arcgis-network-analyst-questions/
+        how-to-add-travel-mode-when-creating-a-network/td-p/1042568.
+    """
+
+    try:
+        service_area = arcpy.nax.ServiceArea(nd_layer_name)
+    except ValueError as e:
+        if str(e) == "Input network dataset does not have at least one travel mode.":
+            raise ValueError(note)
+        else:
+            raise e
+
+    service_area.timeUnits = arcpy.nax.TimeUnits.Seconds
+    service_area.defaultImpedanceCutoffs = cutoff_time
+    service_area.travelMode = arcpy.nax.GetTravelModes(nd_layer_name)['DriveTime']
+    service_area.outputType = arcpy.nax.ServiceAreaOutputType.Polygons
+    service_area.geometryAtOverlap = arcpy.nax.ServiceAreaOverlapGeometry.Split
+
+    fields = ["Name", "SHAPE@"]
+    with service_area.insertCursor(arcpy.nax.ServiceAreaInputDataType.Facilities, fields) as cur:
+        for i, row in rescue_station.iterrows():
+            name, lat, lon = row['Number'], row['lat'], row['lon']
+            cur.insertRow(([name, (lon, lat)]))
+
+    return service_area
+
+
+def init_route_analysis_arcgis(nd_layer_name, rescue_station, incidents, num_sampling=None):
+
+    note = """
+        MANUAL OPERATION: go to the network dataset under the feature dataset. Right click the nd, and 
+        add a new travel mode called 'DriveTime' manually. This step must be finished in the UI, as the 
+        travel mode attribute of nd is set as read-only. Esri does not support adding a travel mode from 
+        scrtach to nd yet. Ref: https://community.esri.com/t5/arcgis-network-analyst-questions/
+        how-to-add-travel-mode-when-creating-a-network/td-p/1042568.
+    """
+
+    try:
+        route = arcpy.nax.Route(nd_layer_name)
+    except ValueError as e:
+        if str(e) == "Input network dataset does not have at least one travel mode.":
+            raise ValueError(note)
+        else:
+            raise e
+
+    route.timeUnits = arcpy.nax.TimeUnits.Seconds
+    route.travelMode = arcpy.nax.GetTravelModes(nd_layer_name)['DriveTime']
+
+
+    if num_sampling is not None:
+        incidents = incidents.sample(n=num_sampling)
+    rescue_station_involved = incidents['Rescue Squad Number'].unique()
+    rescue_station = rescue_station[rescue_station['Number'].isin(rescue_station_involved)]
+
+    fields = ["RouteName", "Sequence", "SHAPE@"]
+    with route.insertCursor(arcpy.nax.RouteInputDataType.Stops, fields) as cur:
+        for res in rescue_station.iterrows():
+            for inc in incidents[incidents['Rescue Squad Number'] == res[1]["Number"]].iterrows():
+                route_name = f'{res[1]["Number"]}-{inc[1]["EMS Call Number"]}'
+                cur.insertRow(([
+                    route_name, 1,
+                    (res[1]['lon'], res[1]['lat'])]))
+                cur.insertRow(([route_name, 2, (inc[1]['lon'], inc[1]['lat'])]))
+
+    return route
+
+
+
+
 
 def _addPathLen2Graph(graph, rescue, weight, newAttribute_rescueSquad, newAttribute_pathLen,
                       newAttribute_pathList=None):
@@ -81,3 +159,4 @@ def removeDisconnectedNodes(graph):
     nodes_to_remove = [node for node in graph.nodes if node not in largest_cc]
     graph.remove_nodes_from(nodes_to_remove)
     return graph
+
