@@ -25,8 +25,9 @@ def init_service_area_analysis_arcgis(nd_layer_name, rescue_station, cutoff_time
     service_area.timeUnits = arcpy.nax.TimeUnits.Seconds
     service_area.defaultImpedanceCutoffs = cutoff_time
     service_area.travelMode = arcpy.nax.GetTravelModes(nd_layer_name)['DriveTime']
-    service_area.outputType = arcpy.nax.ServiceAreaOutputType.Polygons
-    service_area.geometryAtOverlap = arcpy.nax.ServiceAreaOverlapGeometry.Split
+    service_area.outputType = arcpy.nax.ServiceAreaOutputType.PolygonsAndLines
+    service_area.geometryAtCutoff = arcpy.nax.ServiceAreaPolygonCutoffGeometry.Disks
+    service_area.geometryAtOverlap = arcpy.nax.ServiceAreaOverlapGeometry.Overlap
 
     fields = ["Name", "SHAPE@"]
     with service_area.insertCursor(arcpy.nax.ServiceAreaInputDataType.Facilities, fields) as cur:
@@ -37,7 +38,26 @@ def init_service_area_analysis_arcgis(nd_layer_name, rescue_station, cutoff_time
     return service_area
 
 
+def run_service_area_analysis_arcgis(
+        geodatabase_addr, fd_name, nd_name, nd_layer_name,
+        rescue_station, cutoff=[300]
+):
+    arcpy.env.overwriteOutput = True
+    arcpy.nax.MakeNetworkDatasetLayer(  # make layer
+        f'{geodatabase_addr}/{fd_name}/{nd_name}', nd_layer_name
+    )
+    service_area_analyst = init_service_area_analysis_arcgis(
+        nd_layer_name, rescue_station, cutoff
+    )
+    service_area_result = service_area_analyst.solve()
+    assert service_area_result.solveSucceeded is True, 'Solving failed.'
+    service_area_result.export(
+        arcpy.nax.ServiceAreaOutputDataType.Polygons, f'{geodatabase_addr}/service_area_results',
+    )
+
+
 def init_route_analysis_arcgis(nd_layer_name, rescue_station, incidents, num_sampling=None):
+    import ast
 
     note = """
         MANUAL OPERATION: go to the network dataset under the feature dataset. Right click the nd, and 
@@ -58,7 +78,6 @@ def init_route_analysis_arcgis(nd_layer_name, rescue_station, incidents, num_sam
     route.timeUnits = arcpy.nax.TimeUnits.Seconds
     route.travelMode = arcpy.nax.GetTravelModes(nd_layer_name)['DriveTime']
 
-
     if num_sampling is not None:
         incidents = incidents.sample(n=num_sampling)
     rescue_station_involved = incidents['Rescue Squad Number'].unique()
@@ -66,18 +85,37 @@ def init_route_analysis_arcgis(nd_layer_name, rescue_station, incidents, num_sam
 
     fields = ["RouteName", "Sequence", "SHAPE@"]
     with route.insertCursor(arcpy.nax.RouteInputDataType.Stops, fields) as cur:
-        for res in rescue_station.iterrows():
-            for inc in incidents[incidents['Rescue Squad Number'] == res[1]["Number"]].iterrows():
-                route_name = f'{res[1]["Number"]}-{inc[1]["EMS Call Number"]}'
+        for i, res in rescue_station.iterrows():
+            for j, inc in incidents[incidents['Rescue Squad Number'] == res["Number"]].iterrows():
+                route_name = f'{res["Number"]}-{inc["EMS Call Number"]}'
                 cur.insertRow(([
                     route_name, 1,
-                    (res[1]['lon'], res[1]['lat'])]))
-                cur.insertRow(([route_name, 2, (inc[1]['lon'], inc[1]['lat'])]))
+                    (res['lon'], res['lat'])
+                ]))
+                inc_corr = ast.literal_eval(inc['IncidentCoor'])
+                cur.insertRow(([
+                    route_name, 2,
+                    (inc_corr[1], inc_corr[0])
+                ]))
 
     return route
 
 
-
+def run_route_analysis_arcgis(
+        geodatabase_addr, fd_name, nd_name, nd_layer_name,
+        rescue_station, incidents, num_sampling=None,
+):
+    arcpy.env.overwriteOutput = True
+    arcpy.nax.MakeNetworkDatasetLayer(  # make layer
+        f'{geodatabase_addr}/{fd_name}/{nd_name}', nd_layer_name
+    )
+    route_analyst = init_route_analysis_arcgis(
+        nd_layer_name, rescue_station, incidents, num_sampling,
+    )
+    route_result = route_analyst.solve()
+    route_result.export(
+        arcpy.nax.RouteOutputDataType.Routes, f'{geodatabase_addr}/route_results',
+    )
 
 
 def _addPathLen2Graph(graph, rescue, weight, newAttribute_rescueSquad, newAttribute_pathLen,
