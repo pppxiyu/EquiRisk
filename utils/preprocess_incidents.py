@@ -12,7 +12,7 @@ def geocode_incident(data_addr, time_range, save_addr):
     data = pd.read_csv(data_addr)
     data['Call Date and Time'] = pd.to_datetime(data['Call Date and Time'], format="%Y-%m-%d %H:%M:%S")
     data = data[(data['Call Date and Time'] >= time_range[0]) & (data['Call Date and Time'] <= time_range[1])]
-    data['Country'] = 'USA'
+    data['Country'] = ['USA'] * len(data)
     data['Address'] = data['Block Address'].str.cat([
         pd.Series(', ', index=data.index),
         data['City'],
@@ -36,6 +36,8 @@ def geocode_incident(data_addr, time_range, save_addr):
 
 
 def import_incident(address):
+    from shapely.geometry import box
+
     data = pd.read_csv(address)
 
     time_cols = [
@@ -44,6 +46,8 @@ def import_incident(address):
     ]
     for col in time_cols:
         data[col] = pd.to_datetime(data[col], format="%Y-%m-%d %H:%M:%S")
+        data[col] = data[col].dt.tz_localize('America/New_York')
+        data[col] = data[col].dt.tz_convert('UTC')
 
     data['DispatchTime'] = (data['Dispatch Date and Time'] - data['Call Date and Time']).astype("timedelta64[s]")
     data['EnRouteTime'] = (data['En route Date and Time'] - data['Call Date and Time']).astype("timedelta64[s]")
@@ -56,51 +60,84 @@ def import_incident(address):
     data = data.sort_index()
     data = data.reset_index()
 
-    data['IncidentPoint'] = gpd.GeoSeries(gpd.points_from_xy(
-        y=data['IncidentLat'], x=data['IncidentLon'],
-    ), index=data.index, crs="EPSG:4326")
-    data = gpd.GeoDataFrame(data, geometry=data['IncidentPoint'])
+    if 'IncidentPoint' not in data.columns:
+        data['IncidentPoint'] = gpd.GeoSeries(gpd.points_from_xy(
+            y=data['IncidentLat'], x=data['IncidentLon'],
+        ), index=data.index, crs="EPSG:4326")
+        data = gpd.GeoDataFrame(data, geometry=data['IncidentPoint'])
+
+    minx, miny, maxx, maxy = [-76.227826, 36.550525, 75.867555, 36.931973]
+    bbox = box(minx, miny, maxx, maxy)
+    data = data[data.intersects(bbox)]
+
+    data['incident_id'] = list(range(1, len(data) + 1))
 
     return data
 
 
-def incidents_add_rescue_station(data, rescue):
+def add_actual_rescue_station(incident, rescue):
     rescue = rescue.drop('geometry', axis=1)
-    data = data[data['Rescue Squad Number'].isin(rescue.Number.to_list())]
-    data = data.merge(rescue, how='left', left_on='Rescue Squad Number', right_on='Number')
-    return data
+    incident = incident[incident['Rescue Squad Number'].isin(rescue.Number.to_list())]
+    incident = incident.merge(rescue, how='left', left_on='Rescue Squad Number', right_on='Number')
+    return incident
 
 
-def legacy__organize_data(data):
-    data['CallDateTime'] = data.index
-    data = data.reset_index(drop=True)
-    data = data.loc[:, [
-                           'Call Priority',
-                           'CallDateTime', 'EntryDateTime', 'DispatchDateTime', 'EnRouteDateTime', 'OnSceneDateTime',
-                           'CloseDateTime',
-                           'DispatchTime', 'EnRouteTime', 'TravelTime', 'ResponseTime', 'HourInDay', 'DayOfWeek',
-                           'Rescue Squad Number', 'geometry',
-                           'Address', 'IncidentFullInfo', 'IncidentPoint', ]]
-    data = data.rename(columns={"geometry": "RescueSquadPoint",
-                                "Address": "IncidentAddress",
-                                'Rescue Squad Number': 'RescueSquadNumber',
-                                'Call Priority': 'CallPriority'})
-    data.set_geometry("IncidentPoint")
-    return data
+def add_nearest_rescue_station(incident, rescue):
+    original_crs = incident.crs
+    incident = incident.to_crs('epsg:32633')
+    rescue = rescue.to_crs('epsg:32633')
+    assert rescue.crs == incident.crs
+    incident = incident.sjoin_nearest(rescue, how='left', lsuffix='actual', rsuffix='nearest')
+    incident = incident.to_crs(original_crs)
+    return incident
 
 
-def legacy__string_2_points(data, column, crs, index):
-    x = [float(location.replace('POINT (', '').replace(')', '').split(' ')[0]) for location in
-         list(data[column].values)]
-    y = [float(location.replace('POINT (', '').replace(')', '').split(' ')[1]) for location in
-         list(data[column].values)]
-    return gpd.GeoSeries(gpd.points_from_xy(x=x, y=y), crs=crs, index=index)
+def add_period_label(incident, label_dict):
+    from datetime import datetime
+
+    incident['period_label'] = len(incident) * ['']
+
+    assert len(list(label_dict.items())) == 2, 'Only include the begin and end labels'
+    start = list(label_dict.items())[0]
+    end = list(label_dict.items())[1]
+
+    start_time = datetime.strptime(start[0], '%Y-%m-%d %H:%M:%S')
+    end_time = datetime.strptime(end[0], '%Y-%m-%d %H:%M:%S')
+    time_intervals = pd.date_range(start=start_time, end=end_time, freq='H').strftime('%Y-%m-%d %H:%M:%S').tolist()
+
+    start_label = start[1]
+    end_label = end[1]
+    labels = list(range(start_label, end_label + 1))
+
+    for i, l in zip(range(len(time_intervals) - 1), labels):
+        t_1 = time_intervals[i]
+        t_2 = time_intervals[i + 1]
+        incident.loc[
+            (incident['Call Date and Time'] >= t_1) & (incident['Call Date and Time'] <= t_2),
+            'period_label'] = l
+
+    return incident
 
 
-def legacy_reload_incidents(address):
-    data = pd.read_csv(address, index_col='CallDateTime')
-    data.index = pd.to_datetime(data.index, format="%Y-%m-%d %H:%M:%S")
-    data = gpd.GeoDataFrame(data)
-    data['RescueSquadPoint'] = legacy__string_2_points(data, 'RescueSquadPoint', "EPSG:4326", data.index)
-    data['IncidentPoint'] = legacy__string_2_points(data, 'IncidentPoint', "EPSG:4326", data.index)
-    return data
+def convert_feature_class_to_df(incident, feature_class_addr, label_list):
+    import arcpy
+    import warnings
+
+    df_list = []
+    for l in label_list:
+        if arcpy.Exists(f'{feature_class_addr}_{l}') is not True:
+            warnings.warn(f'route_results_{l} is missing')
+            continue
+
+        arr = arcpy.da.FeatureClassToNumPyArray(
+            f'{feature_class_addr}_{l}', ('Name', 'Total_Seconds')
+        )
+        df = pd.DataFrame(arr)
+        df['rescue_name'] = df['Name'].str.split('-').str[0]
+        df['incident_id'] = df['Name'].str.split('-').str[1].astype('int64')
+        df_list.append(df)
+
+    df = pd.concat(df_list, axis=0)
+    incident = incident.merge(df[['incident_id', 'Total_Seconds']], how='left', on='incident_id')
+
+    return incident

@@ -238,6 +238,7 @@ def add_turn_restriction_arcgis(
     return
 
 
+##########################
 def legacy_roads_2_graph(roads):
     import momepy
     roads4graph = roads.copy()
@@ -250,25 +251,4 @@ def legacy_roads_2_graph(roads):
     return graph
 
 
-def legacy_assignGraphEdge(data, roads, inColumn, outColumn1, outColumn2, max_distance=500):
-    # NOTE: there could be null value if no road is within the scope of search for a location
-    roadLines = roads.loc[:, ['OBJECTID', 'line']].set_geometry('line')
-    locations = data.loc[:, [inColumn]].set_geometry(inColumn).to_crs(roadLines.crs)
-    match = locations.sjoin_nearest(roadLines, how='left', max_distance=max_distance, distance_col='distance')
-    match = match.reset_index().drop_duplicates(subset=['CallDateTime']).set_index('CallDateTime')
-    data[outColumn1] = match['OBJECTID']
-    data[outColumn2] = match['distance']
-    return data
 
-def legacy_showGraphRoads(roads, graph):
-    f, ax = plt.subplots(1, 3, figsize=(100, 50), sharex=True, sharey=True)
-    for i, facet in enumerate(ax):
-        facet.set_title(("Streets", "Primal graph", "Overlay")[i])
-        facet.axis("off")
-
-    roads.plot(color='#e32e00', ax=ax[0])
-    nx.draw(graph, {key: [value.x, value.y] for key, value in nx.get_node_attributes(graph, 'midpoint').items()},
-            ax=ax[1], node_size=1)
-    roads.plot(color='#e32e00', ax=ax[2], zorder=-1)
-    nx.draw(graph, {key: [value.x, value.y] for key, value in nx.get_node_attributes(graph, 'midpoint').items()},
-            ax=ax[2], node_size=1)

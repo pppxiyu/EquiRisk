@@ -35,51 +35,6 @@ def add_nearest_intersection(point, road_intersection):
     return id
 
 
-def legacy_readRescue(rescueAddress, crs, roads):
-    rescue = pd.read_csv(rescueAddress)
-    rescue = gpd.GeoDataFrame(rescue, geometry=gpd.points_from_xy(rescue['lon'], rescue['lat'])).set_crs(crs).to_crs(
-        roads.crs)
-    rescue['OBJECTID_nearestRoad'] = rescue.geometry.apply(lambda x: x.distance(roads.line).sort_values().index[0] + 1)
-    return rescue
-
-
-#########
-def _inundationCutter(inundation, cut, all_touched, invert,
-                      addr='./data/inundation/croppedByBridge/croppedByBridge.tif'):
-    if inundation.crs != cut.crs:
-        return 'crs not consistent'
-    # mask the inundation using bridges shp, remove the inundation under bridges
-    out_array, _ = rasterio.mask.mask(inundation, cut.geometry, all_touched=all_touched, invert=invert)
-    inundation_cropped = rasterio.open(
-        addr,
-        'w+',
-        **inundation.meta
-    )
-    inundation_cropped.write(out_array)
-    return inundation_cropped
-
-
-def _getMaxWaterDepth(roadGeometry, inundation):
-    # roadGeometry should be series, inundation is raster
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        inundationOnRoad, _ = rasterio.mask.mask(inundation, roadGeometry)
-        inundationOnRoad = np.where(inundationOnRoad == inundation.nodata, - inundationOnRoad, inundationOnRoad)
-    return np.max(inundationOnRoad)
-
-
-def getWaterDepthOnRoads(roads, inundation_address, inundation_cut_save_address):
-    inundation = rasterio.open(inundation_address)
-    roads_updated_4getInundation = roads.copy().to_crs(str(inundation.crs))
-    inundation_cutByRoads = _inundationCutter(inundation, roads_updated_4getInundation, False, False,
-                                              inundation_cut_save_address)
-
-    roads['waterDepth'] = roads_updated_4getInundation.loc[:, ['surface']] \
-        .apply(lambda x: _getMaxWaterDepth(x, inundation_cutByRoads), axis=1, raw=True).replace(-inundation.nodata, 0)
-    return roads
-
-
-
 # visualzation
 def showRoadsInundation(inundation):
     fig = plt.figure(figsize=(100, 50))

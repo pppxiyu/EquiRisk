@@ -2,6 +2,8 @@ import pandas as pd
 import geopandas as gpd
 import numpy as np
 from shapely import Polygon
+import warnings
+import rasterio
 
 
 def pull_roads_osm(city, city_abbr, folder, filter):
@@ -35,8 +37,8 @@ def import_roads_osm(folder, city_abbr):
     return graph, gdf_edges, gdf_nodes
 
 
-def add_roads_max_speed(gdf, speed):
-    gdf['maxspeed_assigned_mile'] = gdf['highway'].map(speed)
+def add_roads_max_speed(gdf, speed, maxspeed_name):
+    gdf[maxspeed_name] = gdf['highway'].map(speed)
     assert gdf['highway'].isna().any() == False, 'Speed was not assigned to all roads.'
     return gdf
 
@@ -118,88 +120,122 @@ def import_bridge_tunnel(addr):
     return gdf
 
 
-def add_travel_time_2_seg(roads):
-    # roads_crs = roads.crs
-    # roads = roads.to_crs('epsg:32633')
-    # roads['length'] = roads.geometry.length
-    roads['maxspeed_assigned_m_per_s'] = roads['maxspeed_assigned_mile'] * 1.60934 * 1000 / 60 / 60
-    roads['travel_time_s'] = roads['length'] / roads['maxspeed_assigned_m_per_s']
-    # roads = roads.to_crs(roads_crs)
+def add_travel_time_2_seg(roads, maxspeed_name, travel_time_name):
+    # input('For add_travel_time_2_seg, input speed is mile/h, and output time is seconds.')
+    roads['maxspeed_assigned_m_per_s'] = roads[maxspeed_name] * 1.60934 * 1000 / 60 / 60
+    roads[travel_time_name] = roads['length'] / roads['maxspeed_assigned_m_per_s']
     return roads
 
 
-def legacy__moveDuplicates(joined):
-    # move duplicates, keep the row with higher width
-    u, c = np.unique(joined.OBJECTID_left.values, return_counts=True)
-    duplicates = u[c > 1]
-    joined_noDuplicates = joined.copy()
-    for dup in duplicates:
-        du = joined[joined.OBJECTID_left == dup]
-        joined_noDuplicates = joined_noDuplicates[joined_noDuplicates.OBJECTID_left != dup]
-        duOne = du[du.aveWidth == du.aveWidth.max()]
-        joined_noDuplicates = pd.concat([joined_noDuplicates, duOne])
-    return joined_noDuplicates.sort_values(by=['OBJECTID_left'])
+def add_water_depth_on_roads(roads, inundation_tif_addr, label, new_col_name, remove_bridge=True):
+    from rasterio.features import shapes
 
+    inundation = rasterio.open(inundation_tif_addr)
+    results = (
+        {'properties': {'val': v}, 'geometry': s} for i, (s, v)
+        in enumerate(shapes(inundation.read(1), mask=None, transform=inundation.transform))
+    )
 
-def legacy__createSurface4roads(roads, roadSurfaces):
-    # USE: create a geoDataFrame containing the column of average width and full polygon (might include multiple road segments) for each road
-    # spatial join road lines and surfaces
-    if roads.crs != roadSurfaces.crs:
-        return 'crs not consistent'
-    roadSurfaces['aveWidth'] = roadSurfaces.Shapearea / roadSurfaces.Shapelen
-    roads['midpoint'] = roads.geometry.interpolate(0.5, normalized=True)
-    roads = roads.set_geometry("midpoint", crs=roadSurfaces.crs)
-    roads = roads.rename(columns={"geometry": "line"})
-    joined = roads.sjoin(roadSurfaces, how="left", predicate='within')
-    # move duplicates/nan
-    joined_updated = legacy__moveDuplicates(joined)
-    joined_updated.loc[np.isnan(joined_updated.aveWidth), [
-        'aveWidth']] = joined_updated.aveWidth.mean()  # assign width to missing roads
-    # attach roadSurface polygons
-    joined_updated['OBJECTID_right'] = joined_updated.OBJECTID_right.astype('Int64')
-    roadSurfaces_temp = roadSurfaces[['OBJECTID', 'geometry']].rename(
-        {'OBJECTID': 'OBJECTID_right', 'geometry': 'surfacePolygon'}, axis=1)
-    roadSurfaces_temp.loc[len(roadSurfaces_temp)] = [np.nan, Polygon()]
-    roadSurfaces_temp.OBJECTID_right = roadSurfaces_temp.OBJECTID_right.astype('Int64')
-    joined_updated = joined_updated.merge(roadSurfaces_temp, how='left', on='OBJECTID_right')
-    joined_updated = joined_updated.set_geometry('surfacePolygon').set_crs(roadSurfaces.crs)
-    return joined_updated
+    polygons = gpd.GeoDataFrame.from_features(list(results))
+    polygons = polygons.set_crs(inundation.crs)
+    polygons = polygons.to_crs(roads.crs)
+    assert polygons.crs == roads.crs, 'CRS inconsistent.'
 
+    polygons = polygons[polygons['val'] != polygons['val'].max()]
+    warnings.warn('It is assumed that the no data value was set to a very big number by ArcGIS.')
 
-def legacy_make_surface_4_lines(roads, surfaceAddress, scale=2.7):
-    roadSurfaces = gpd.read_file(surfaceAddress)
-    surfaces4roads = legacy__createSurface4roads(roads, roadSurfaces)
+    inundated_roads = roads.copy().sjoin(polygons, how='inner', predicate='intersects')
 
-    roads['aveWidth'] = surfaces4roads.aveWidth
-    roads['scaledRadius'] = roads['aveWidth'] / 2 * scale
-    roads['buffers'] = roads.geometry.buffer(roads['scaledRadius'])
-    roads['buffersUnscaled'] = roads.geometry.buffer(
-        roads['aveWidth'] / 2 * 1.5)  # may be some errors in raw data, roads look good when multiply by 1.5
-    roads = roads.rename(columns={"geometry": "line"})
-    roads = roads.set_geometry('buffers', crs=roadSurfaces.crs)
+    inundated_roads_max = inundated_roads[['val']].groupby(inundated_roads.index).max()
+    inundated_roads_mean = inundated_roads[['val']].groupby(inundated_roads.index).mean()
 
-    roads['surface'] = [road.intersection(surface) if not road.intersection(surface).is_empty else roadUnscaled \
-                        for road, surface, roadUnscaled in
-                        zip(roads.geometry, surfaces4roads.geometry, roads.buffersUnscaled)]
-    roads = roads.set_geometry('surface', crs=roadSurfaces.crs)
+    roads[f"{new_col_name['max']}_{label}"] = inundated_roads_max['val']
+    roads[f"{new_col_name['mean']}_{label}"] = inundated_roads_mean['val']
+
+    if remove_bridge:
+        roads.loc[roads['bridge'] == 'yes', f'{new_col_name["max"]}_{label}'] = np.nan
+        roads.loc[roads['bridge'] == 'yes', f'{new_col_name["mean"]}_{label}'] = np.nan
+
     return roads
 
 
-def legacy_read_roads(roadAddress):
-    roads = gpd.read_file(roadAddress)
-    roads = roads.loc[-roads['geometry'].duplicated(), :]
-    roads['OBJECTID'] = list(range(1, len(roads) + 1))
-    roads = roads.reset_index(drop=True)
-    return roads
+class InundationToSpeed:
+    def __init__(self, thr=30, unit_checker=False):
+        # input('threshold should be cm.')
+        self.thr = thr
+        self.unit_checker = unit_checker
+
+        self.speed_unique = None
+        self.curves = {}
+
+        self.cut_series = None
+        self.reduce_series = None
+        return
+
+    def build_decreasing_curve(self):
+        from sklearn.linear_model import LinearRegression
+        from sklearn.preprocessing import PolynomialFeatures
+        for s in self.speed_unique:
+            x = np.array([0, self.thr])[:, np.newaxis]
+            y = np.array([s, 0])[:, np.newaxis]
+            model = LinearRegression()
+            model.fit(x, y)
+            self.curves[s] = model
+        return
+
+    def calculate_safe_control_speed(self, series):
+        return 0.0009 * series * series - 0.5529 * series + 86.9448
+
+    def cutoff(self, depth_series):
+        if self.unit_checker:
+            input('For cutoff(), the input water depth should be ft. Enter to continue.')
+
+        if_cut = depth_series * 30.48 >= self.thr
+        self.cut_series = if_cut
+        return if_cut
+
+    def reduce(self, depth_series, maxspeed_series):
+        if self.unit_checker:
+            input('For reduce(), the input water depth should be ft, speed is mile/h. Enter to continue.')
+        self.speed_unique = maxspeed_series.unique()
+
+        speed_df = pd.DataFrame(index=maxspeed_series.index)
+        speed_df['speed'] = [np.nan] * len(speed_df)
+
+        self.build_decreasing_curve()
+
+        maxspeed_series = maxspeed_series[(depth_series * 30.48 < self.thr) & (depth_series * 30.48 > 0)]
+        depth_series = depth_series[(depth_series * 30.48 < self.thr) & (depth_series * 30.48 > 0)]
+        speed_df['depth'] = depth_series
+
+        for s in self.speed_unique:
+            curve = self.curves[s]
+            s_depth_series = depth_series[maxspeed_series == s]
+            s_speed = curve.predict(
+                (s_depth_series * 30.48).values[:, np.newaxis]
+            )
+            speed_df.loc[s_depth_series.index, 'speed'] = s_speed[:, 0]
+
+        # safe control theoretical limit
+        speed_df['safe_control'] = self.calculate_safe_control_speed(
+            speed_df['depth'].fillna(0) * 30.48 * 10
+        ) * 0.621371
+        speed_df['speed'] = speed_df['speed'].where(
+            (speed_df['speed'] <= speed_df['safe_control']) | speed_df['speed'].isna(),
+            speed_df['safe_control']
+        )
+
+        self.reduce_series = speed_df['speed']
+        return speed_df['speed']
+
+    def apply_orig_speed(self, original_maxspeed_series):
+        if self.unit_checker:
+            input('For apply_original_speed(), the input speed is mile/h. Enter to continue.')
+
+        speed_series = self.cut_series.map({True: 1e-5, False: np.nan})
+        speed_series = speed_series.fillna(self.reduce_series)
+        speed_series = speed_series.fillna(original_maxspeed_series)
+
+        return speed_series
 
 
-def legacy_reload_roads(addr):
-    addrSplit = addr.split('.shp')
-    roads = gpd.read_file(addr)
-    roads['line'] = gpd.read_file(addrSplit[0] + '_line.shp').geometry
-    roads['midpoint'] = gpd.read_file(addrSplit[0] + '_midpoint.shp').geometry
-    roads['buffers'] = gpd.read_file(addrSplit[0] + '_buffers.shp').geometry
-    roads['buffersUnscaled'] = gpd.read_file(addrSplit[0] + '_buffersUnscaled.shp').geometry
-    roads = roads.rename(columns={'geometry': 'surface', 'scaledRadi': 'scaledRadius'})
-    roads = roads.set_geometry('surface')
-    return roads

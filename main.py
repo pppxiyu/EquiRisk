@@ -7,6 +7,7 @@ import data as dd
 import warnings
 import arcpy
 import geopandas as gpd
+import matplotlib.pyplot as plt
 
 
 if __name__ == "__main__":
@@ -26,8 +27,15 @@ if __name__ == "__main__":
     # road_segment = pp_r.add_travel_time_2_seg(road_segment)
 
     rescue_station = pp.import_rescue_station('./data/rescue_team_location/rescue_stations_n_nearest_geo.csv')
-    incidents = pp_i.import_incident('./data/ambulance/geocoded/20130101-20130102.csv')
-    incidents = pp_i.incidents_add_rescue_station(incidents, rescue_station)
+    incidents = pp_i.import_incident('./data/ambulance/geocoded/20160101-20161015.csv')
+    incidents = pp_i.add_actual_rescue_station(incidents, rescue_station)
+    incidents = pp_i.add_nearest_rescue_station(incidents, rescue_station)
+    incidents = pp_i.add_period_label(
+        incidents, {
+            '2016-10-09 00:00:00': 25,
+            '2016-10-09 23:00:00': 48,
+        }
+    )
 
     geodatabase_addr = './gis_analysis/arcgis_emergency_service_routing/arcgis_emergency_service_routing.gdb'
     fd_name = 'road_network'

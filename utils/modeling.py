@@ -1,6 +1,3 @@
-import networkx as nx
-import math
-import numpy as np
 import arcpy
 
 
@@ -56,145 +53,132 @@ def run_service_area_analysis_arcgis(
     )
 
 
-def init_route_analysis_arcgis(nd_layer_name, rescue_station, incidents, num_sampling=None):
-    import ast
+class RouteAnalysis:
+    def __init__(self, incidents, rescue_station_col):
+        self.incidents = incidents
+        self.rescue_station_col = rescue_station_col
+        self.num_sampling = None
 
-    note = """
-        MANUAL OPERATION: go to the network dataset under the feature dataset. Right click the nd, and 
-        add a new travel mode called 'DriveTime' manually. This step must be finished in the UI, as the 
-        travel mode attribute of nd is set as read-only. Esri does not support adding a travel mode from 
-        scrtach to nd yet. Ref: https://community.esri.com/t5/arcgis-network-analyst-questions/
-        how-to-add-travel-mode-when-creating-a-network/td-p/1042568.
-    """
+    def init_route_analysis_arcgis(
+            self, nd_layer_name, rescue_station, incidents,
+    ):
 
-    try:
-        route = arcpy.nax.Route(nd_layer_name)
-    except ValueError as e:
-        if str(e) == "Input network dataset does not have at least one travel mode.":
-            raise ValueError(note)
-        else:
-            raise e
+        note = """
+            MANUAL OPERATION: go to the network dataset under the feature dataset. Right click the nd, and 
+            add a new travel mode called 'DriveTime' manually. This step must be finished in the UI, as the 
+            travel mode attribute of nd is set as read-only. Esri does not support adding a travel mode from 
+            scrtach to nd yet. Ref: https://community.esri.com/t5/arcgis-network-analyst-questions/
+            how-to-add-travel-mode-when-creating-a-network/td-p/1042568.
+        """
 
-    route.timeUnits = arcpy.nax.TimeUnits.Seconds
-    route.travelMode = arcpy.nax.GetTravelModes(nd_layer_name)['DriveTime']
-
-    if num_sampling is not None:
-        incidents = incidents.sample(n=num_sampling)
-    rescue_station_involved = incidents['Rescue Squad Number'].unique()
-    rescue_station = rescue_station[rescue_station['Number'].isin(rescue_station_involved)]
-
-    fields = ["RouteName", "Sequence", "SHAPE@"]
-    with route.insertCursor(arcpy.nax.RouteInputDataType.Stops, fields) as cur:
-        for i, res in rescue_station.iterrows():
-            for j, inc in incidents[incidents['Rescue Squad Number'] == res["Number"]].iterrows():
-                route_name = f'{res["Number"]}-{inc["EMS Call Number"]}'
-                cur.insertRow(([
-                    route_name, 1,
-                    (res['lon'], res['lat'])
-                ]))
-                inc_corr = ast.literal_eval(inc['IncidentCoor'])
-                cur.insertRow(([
-                    route_name, 2,
-                    (inc_corr[1], inc_corr[0])
-                ]))
-
-    return route
-
-
-def run_route_analysis_arcgis(
-        geodatabase_addr, fd_name, nd_name, nd_layer_name,
-        rescue_station, incidents, num_sampling=None,
-):
-    arcpy.env.overwriteOutput = True
-    arcpy.nax.MakeNetworkDatasetLayer(  # make layer
-        f'{geodatabase_addr}/{fd_name}/{nd_name}', nd_layer_name
-    )
-    route_analyst = init_route_analysis_arcgis(
-        nd_layer_name, rescue_station, incidents, num_sampling,
-    )
-    route_result = route_analyst.solve()
-    route_result.export(
-        arcpy.nax.RouteOutputDataType.Routes, f'{geodatabase_addr}/route_results',
-    )
-
-
-def _addPathLen2Graph(graph, rescue, weight, newAttribute_rescueSquad, newAttribute_pathLen,
-                      newAttribute_pathList=None):
-    # some roads are disconnected from all the rescue station even in normal time (as the raw data indicates)
-    voronoi = nx.voronoi_cells(graph, set(rescue.OBJECTID_nearestRoad.unique()), weight=weight)
-    for rescueSquad, destinations in zip(voronoi.keys(), voronoi.values()):
-        if rescueSquad == 'unreachable':
-            print(len(destinations), 'nodes are unreachable when building voronoi for', newAttribute_pathLen)
-            for des in destinations:
-                graph.nodes[des][newAttribute_rescueSquad] = np.nan
-                graph.nodes[des][
-                    newAttribute_pathLen] = math.inf  # set path len to inf if it's disconnected from rescues
-        #                 print('NOTE: node', des, 'is unreachable when building voronoi for', newAttribute_pathLen)
-        else:
-            for des in destinations:
-                shortestPathLen = nx.shortest_path_length(graph, source=rescueSquad, target=des, weight=weight)
-                graph.nodes[des][newAttribute_pathLen] = shortestPathLen
-                graph.nodes[des][newAttribute_rescueSquad] = rescueSquad
-                if newAttribute_pathList:
-                    shortestPath = nx.shortest_path(graph, source=rescueSquad, target=des, weight=weight)
-                    graph.nodes[des][newAttribute_pathList] = shortestPath
-                if shortestPathLen == 0:
-                    graph.nodes[des][newAttribute_pathLen] = 1
-                if shortestPathLen == math.inf:
-                    graph.nodes[des][newAttribute_rescueSquad] = math.inf
-    return graph, voronoi
-
-
-def _addDisruption(graph, roads, newAttribute='weightWithDisruption', threshold=3):
-    nx.set_edge_attributes(graph, nx.get_edge_attributes(graph, "weight"), newAttribute)
-    disruptedRoads = roads[roads['waterDepth'] >= threshold]['OBJECTID'].to_list()
-    for disruption in disruptedRoads:
-        for edge in graph.edges(disruption):
-            graph.edges()[edge][newAttribute] = math.inf  # set edge weight to inf if it's disrupted by inundation
-    return graph
-
-
-def _changeValue4DisruptedRoad(roads, graph, threshold=3):
-    # the disrupted road itself is not disconnected, so assign the shortestPath of adjancent road to this road
-    for disruption in roads[roads['waterDepth'] >= threshold]['OBJECTID'].to_list():
-        pathLen = []
-        edgeNum = []
-        for edge in graph.edges(disruption):
-            pathLen.append(graph.nodes()[edge[1]]['shortestPathLenWithDisruption'])
-            edgeNum.append(edge[1])
-        if pathLen != []:  # in case there are disconnected single node
-            graph.nodes()[disruption]['shortestPathLenWithDisruption'] = min(pathLen)
-            if min(pathLen) != math.inf:
-                graph.nodes()[disruption]['rescueAssignedWithDisruption'] = edgeNum[pathLen.index(min(pathLen))]
+        try:
+            route = arcpy.nax.Route(nd_layer_name)
+        except ValueError as e:
+            if str(e) == "Input network dataset does not have at least one travel mode.":
+                raise ValueError(note)
             else:
-                graph.nodes()[disruption]['rescueAssignedWithDisruption'] = np.nan
-    return graph
+                raise e
+
+        route.timeUnits = arcpy.nax.TimeUnits.Seconds
+        route.travelMode = arcpy.nax.GetTravelModes(nd_layer_name)['DriveTime']
+
+        if self.num_sampling is not None:
+            incidents = incidents.sample(n=self.num_sampling)
+        rescue_station_involved = incidents[self.rescue_station_col].unique()
+        rescue_station = rescue_station[rescue_station['Number'].isin(rescue_station_involved)]
+
+        fields = ["RouteName", "Sequence", "SHAPE@"]
+        count = 0
+        with route.insertCursor(arcpy.nax.RouteInputDataType.Stops, fields) as cur:
+            for i, res in rescue_station.iterrows():
+                for j, inc in incidents[incidents[self.rescue_station_col] == res["Number"]].iterrows():
+                    route_name = f'{res["Number"]}-{inc["incident_id"]}'
+                    cur.insertRow(([
+                        route_name, 1,
+                        (res['lon'], res['lat'])
+                    ]))
+                    cur.insertRow(([
+                        route_name, 2,
+                        (inc['IncidentLon'], inc['IncidentLat']),
+                    ]))
+                    count += 1
+
+        assert count == len(incidents)
+        return route
+
+    def run_route_analysis_arcgis(
+            self,
+            geodatabase_addr, fd_name, nd_name, nd_layer_name,
+            rescue_station, roads,
+    ):
+        import warnings
+
+        arcpy.env.overwriteOutput = True
+        arcpy.nax.MakeNetworkDatasetLayer(  # make layer
+            f'{geodatabase_addr}/{fd_name}/{nd_name}', nd_layer_name
+        )
+
+        period_list = list(self.incidents['period_label'].unique())
+
+        if '' in period_list:
+            incidents_select = self.incidents[self.incidents['period_label'] == '']
+            route_analyst = self.init_route_analysis_arcgis(
+                nd_layer_name, rescue_station, incidents_select,
+            )
+            route_result = route_analyst.solve()
+            route_result.export(
+                arcpy.nax.RouteOutputDataType.Routes, f'{geodatabase_addr}/route_results_normal',
+            )
+            if len(incidents_select) != route_result.count(arcpy.nax.RouteOutputDataType.Routes):
+                warnings.warn(
+                    f"{len(incidents_select) - route_result.count(arcpy.nax.RouteOutputDataType.Routes)} "
+                    f"routes are missing when do for normal.")
+
+        if [i for i in period_list if i != ''] != []:
+            evaluator = add_custom_edge_evaluator(
+                'travel_time_s',
+                f'{geodatabase_addr}/{fd_name}/{nd_name}',
+                roads,
+            )
+            for label in [i for i in period_list if i != '']:
+                incidents_select = self.incidents[self.incidents['period_label'] == label]
+                if len(incidents_select) == 0:
+                    continue
+
+                evaluator.label = label  # not sure if it is correct
+                route_analyst = self.init_route_analysis_arcgis(
+                    nd_layer_name, rescue_station, incidents_select,
+                )
+                route_result = route_analyst.solve()
+                route_result.export(
+                    arcpy.nax.RouteOutputDataType.Routes, f'{geodatabase_addr}/route_results_{label}',
+                )
+                if len(incidents_select) != route_result.count(arcpy.nax.RouteOutputDataType.Routes):
+                    warnings.warn(
+                        f"{len(incidents_select) - route_result.count(arcpy.nax.RouteOutputDataType.Routes)} "
+                        f"routes are missing when do for normal.")
 
 
-def runRoutingWithDisruption(graph, rescue, roads):
-    graph, _ = _addPathLen2Graph(graph, rescue, 'weight', 'rescueAssigned', 'shortestPathLen', 'shortestPathList')
-    graphDisrupted = _addDisruption(graph, roads, threshold=1)
-    graph, _ = _addPathLen2Graph(graphDisrupted, rescue, 'weightWithDisruption', 'rescueAssignedWithDisruption',
-                                 'shortestPathLenWithDisruption', 'shortestPathListWithDisruption')
-    graph = _changeValue4DisruptedRoad(roads, graph, threshold=1)
-    return graph
+class EdgeCustomizer(arcpy.nax.AttributeEvaluator):
+    def __init__(self, attributeName, roads, sourceNames=None):
+        super(EdgeCustomizer, self).__init__(attributeName, sourceNames)
+        self.roads = roads
+        self.label = ''
+
+    def edgeValue(self, edge: arcpy.nax.Edge):
+        edge_num = self.networkQuery.sourceInfo(edge)[1]
+        if self.label == '':
+            value = self.roads.loc[edge_num - 1, 'travel_time_s']
+        else:
+            value = self.roads.loc[edge_num - 1, f'travel_time_s_{self.label}']
+        return value
 
 
-def getDisruptionRatio(graph):
-    nx.set_node_attributes(graph,
-                           {x[0]: y[1] / x[1] if y[1] / x[1] != math.inf else np.nan \
-                            for x, y in zip(nx.get_node_attributes(graph, "shortestPathLen").items(),
-                                            nx.get_node_attributes(graph,
-                                                                   "shortestPathLenWithDisruption").items())},
-                           'travelTimeIncreaseRatio')
-    roads['travelTimeIncreaseRatio'] = roads['OBJECTID'].map(
-        nx.get_node_attributes(graph, "travelTimeIncreaseRatio"))
-    return graph
-
-
-def removeDisconnectedNodes(graph):
-    largest_cc = max(nx.connected_components(graph), key=len)
-    nodes_to_remove = [node for node in graph.nodes if node not in largest_cc]
-    graph.remove_nodes_from(nodes_to_remove)
-    return graph
-
+def add_custom_edge_evaluator(attribute_name, nd_name, roads):
+    travel_time_customizer = EdgeCustomizer(
+        attribute_name, roads,
+        ['road_seg', 'road_nd_Junctions', 'turn_restriction'],
+    )
+    network_dataset = arcpy.nax.NetworkDataset(nd_name)
+    network_dataset.customEvaluators = [travel_time_customizer]
+    return travel_time_customizer
