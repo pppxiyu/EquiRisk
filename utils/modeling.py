@@ -81,6 +81,8 @@ class RouteAnalysis:
 
         route.timeUnits = arcpy.nax.TimeUnits.Seconds
         route.travelMode = arcpy.nax.GetTravelModes(nd_layer_name)['DriveTime']
+        route.searchTolerance = 250
+        route.searchToleranceUnits = arcpy.nax.DistanceUnits.Meters
 
         if self.num_sampling is not None:
             incidents = incidents.sample(n=self.num_sampling)
@@ -112,6 +114,7 @@ class RouteAnalysis:
             rescue_station, roads,
     ):
         import warnings
+        import json
 
         arcpy.env.overwriteOutput = True
         arcpy.nax.MakeNetworkDatasetLayer(  # make layer
@@ -120,6 +123,7 @@ class RouteAnalysis:
 
         period_list = list(self.incidents['period_label'].unique())
 
+        inaccessible_route_normal = []
         if '' in period_list:
             incidents_select = self.incidents[self.incidents['period_label'] == '']
             route_analyst = self.init_route_analysis_arcgis(
@@ -129,14 +133,17 @@ class RouteAnalysis:
             route_result.export(
                 arcpy.nax.RouteOutputDataType.Routes, f'{geodatabase_addr}/route_results_normal',
             )
-            if len(incidents_select) != route_result.count(arcpy.nax.RouteOutputDataType.Routes):
+            if route_result.isPartialSolution:
                 warnings.warn(
                     f"{len(incidents_select) - route_result.count(arcpy.nax.RouteOutputDataType.Routes)} "
                     f"routes are missing when do for normal.")
+                error_list = route_result.solverMessages(arcpy.nax.MessageSeverity.All)
+                inaccessible_route_normal = [e[1].split('"')[1] for e in error_list if e[1].startswith('No route for')]
 
+        inaccessible_route_flood_list = {}
         if [i for i in period_list if i != ''] != []:
-            evaluator = add_custom_edge_evaluator(
-                'travel_time_s',
+            cost_eval, restriction_eval = add_custom_edge_evaluator(
+                'travel_time_s', 'inundation',
                 f'{geodatabase_addr}/{fd_name}/{nd_name}',
                 roads,
             )
@@ -145,7 +152,8 @@ class RouteAnalysis:
                 if len(incidents_select) == 0:
                     continue
 
-                evaluator.label = label  # not sure if it is correct
+                cost_eval.label = label
+                restriction_eval.label = label
                 route_analyst = self.init_route_analysis_arcgis(
                     nd_layer_name, rescue_station, incidents_select,
                 )
@@ -153,32 +161,61 @@ class RouteAnalysis:
                 route_result.export(
                     arcpy.nax.RouteOutputDataType.Routes, f'{geodatabase_addr}/route_results_{label}',
                 )
-                if len(incidents_select) != route_result.count(arcpy.nax.RouteOutputDataType.Routes):
+                if route_result.isPartialSolution:
                     warnings.warn(
                         f"{len(incidents_select) - route_result.count(arcpy.nax.RouteOutputDataType.Routes)} "
-                        f"routes are missing when do for normal.")
+                        f"routes are missing for period {label}.")
+                    error_list = route_result.solverMessages(arcpy.nax.MessageSeverity.All)
+                    print(error_list)
+                    inaccessible_route_flood_list[f'{label}'] = error_list
+
+        inaccessible_route_save = {
+            'normal': inaccessible_route_normal, 'flood': inaccessible_route_flood_list
+        }
+        with open('./data/incidents/inaccessible_route.json', 'w') as f:
+            json.dump(inaccessible_route_save, f)
 
 
-class EdgeCustomizer(arcpy.nax.AttributeEvaluator):
+class EdgeCostCustomizer(arcpy.nax.AttributeEvaluator):
     def __init__(self, attributeName, roads, sourceNames=None):
-        super(EdgeCustomizer, self).__init__(attributeName, sourceNames)
+        super(EdgeCostCustomizer, self).__init__(attributeName, sourceNames)
         self.roads = roads
         self.label = ''
 
     def edgeValue(self, edge: arcpy.nax.Edge):
         edge_num = self.networkQuery.sourceInfo(edge)[1]
-        if self.label == '':
-            value = self.roads.loc[edge_num - 1, 'travel_time_s']
-        else:
-            value = self.roads.loc[edge_num - 1, f'travel_time_s_{self.label}']
+        # if self.label == '':
+        #     value = self.roads.loc[edge_num - 1, 'travel_time_s']
+        # else:
+        value = self.roads.loc[edge_num - 1, f'travel_time_s_{self.label}']
         return value
 
 
-def add_custom_edge_evaluator(attribute_name, nd_name, roads):
-    travel_time_customizer = EdgeCustomizer(
-        attribute_name, roads,
-        ['road_seg', 'road_nd_Junctions', 'turn_restriction'],
+class EdgeRestrictionCustomizer(arcpy.nax.AttributeEvaluator):
+    def __init__(self, attributeName, roads, sourceNames=None):
+        super(EdgeRestrictionCustomizer, self).__init__(attributeName, sourceNames)
+        self.roads = roads
+        self.label = ''
+
+    def edgeValue(self, edge: arcpy.nax.Edge):
+        edge_num = self.networkQuery.sourceInfo(edge)[1]
+        value = self.roads.loc[edge_num - 1, f'maxspeed_inundated_mile_{self.label}']
+        if value <= 1e-3:
+            return True
+        else:
+            return False
+
+
+def add_custom_edge_evaluator(cost_attr_name, restriction_attr_name, nd_name, roads):
+    cost_customizer = EdgeCostCustomizer(
+        cost_attr_name, roads,
+        ['road_seg'],
+    )
+    restriction_customizer = EdgeRestrictionCustomizer(
+        restriction_attr_name, roads,
+        ['road_seg'],
     )
     network_dataset = arcpy.nax.NetworkDataset(nd_name)
-    network_dataset.customEvaluators = [travel_time_customizer]
-    return travel_time_customizer
+    network_dataset.customEvaluators = [cost_customizer, restriction_customizer]
+    return cost_customizer, restriction_customizer
+

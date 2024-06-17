@@ -5,6 +5,7 @@ import utils.preprocess_graph as pp_g
 import utils.modeling as mo
 
 import geopandas as gpd
+import matplotlib.pyplot as plt
 
 
 def pull_road_data_osm():
@@ -13,6 +14,15 @@ def pull_road_data_osm():
         'Virginia Beach, VA, USA', 'vb',
         './data/roads',
         '"motorway|trunk|primary|secondary|tertiary|unclassified|residential|service"',
+    )
+
+
+def pull_geocode_incident():
+    # geocode incidents data ans save it
+    pp_i.geocode_incident(
+        './data/incidents/virginiaBeach_ambulance_timeData.csv',
+        ['2013-01-01', '2013-01-02'],
+        './data/incidents/geocoded/20130101-20130102.geojson',
     )
 
 
@@ -30,7 +40,6 @@ def save_inundated_roads():
 
 def save_rescue_data():
     # process rescue station data and save it
-
     road_intersection = gpd.read_file(f"./data/roads/road_intersection_vb.geojson")
     road_segment = gpd.read_file(f"./data/roads/road_segment_vb.geojson")
     rescue_station = pp.import_rescue_station('./data/rescue_team_location/rescue_stations.txt')
@@ -44,71 +53,10 @@ def save_rescue_data():
     return
 
 
-def save_geocode_incident_data():
-    # geocode incidents data ans save it
-    pp_i.geocode_incident(
-        './data/ambulance/virginiaBeach_ambulance_timeData.csv',
-        ['2013-01-01', '2013-01-02'],
-        './data/ambulance/geocoded/20130101-20130102.geojson',
-    )
-
-
-def import_road_data():
-    # import road data w/o inundation using the codes below
-    road_g, road_seg, road_inter = pp_r.import_roads_osm('./data/roads', 'vb')
-    road_seg = pp_r.add_roads_max_speed(
-        road_seg,
-        {
-            'motorway': 55, 'motorway_link': 55, 'trunk': 55, 'trunk_link': 55,
-            'primary': 55, 'primary_link': 55, 'secondary': 55, 'secondary_link': 55,
-            'tertiary': 25, 'tertiary_link': 25, 'unclassified': 25, 'residential': 25, 'service': 25,
-        },
-        'maxspeed_assigned_mile'
-    )
-    turn_restri = pp_r.import_turn_restriction(dir_turn)
-    return road_g, road_seg, road_inter, turn_restri
-
-
-def import_road_seg_w_inundation_info():
-    road_segment_inund = gpd.read_file(dir_road_inundated)
-    road_segment_inund = pp_r.add_roads_max_speed(
-        road_segment_inund,
-        {
-            'motorway': 55, 'motorway_link': 55, 'trunk': 55, 'trunk_link': 55,
-            'primary': 55, 'primary_link': 55, 'secondary': 55, 'secondary_link': 55,
-            'tertiary': 25, 'tertiary_link': 25, 'unclassified': 25, 'residential': 25, 'service': 25,
-        },
-        'maxspeed_assigned_mile'
-    )
-
-    road_segment_inund = pp_r.add_travel_time_2_seg(
-        road_segment_inund,
-        'maxspeed_assigned_mile', 'travel_time_s'
-    )
-
-    converter = pp_r.InundationToSpeed(30)
-    for label in range(25, 48 + 1):
-        converter.cutoff(
-            road_segment_inund[f'max_depth_{label}']
-        )
-        converter.reduce(
-            road_segment_inund[f'mean_depth_{label}'],
-            road_segment_inund['maxspeed_assigned_mile'],
-        )
-        road_segment_inund[f'maxspeed_inundated_mile_{label}'] = converter.apply_orig_speed(
-            road_segment_inund['maxspeed_assigned_mile'],
-        )
-        road_segment_inund = pp_r.add_travel_time_2_seg(
-            road_segment_inund,
-            f'maxspeed_inundated_mile_{label}', f'travel_time_s_{label}'
-        )
-    return road_segment_inund
-
-
 def build_full_graph_arcgis():
     import arcpy
 
-    road_segment = import_road_seg_w_inundation_info()
+    road_segment = pp_r.import_road_seg_w_inundation_info(dir_road_inundated, speed_assigned)
     turn_restriction = pp_r.import_turn_restriction(dir_turn)
 
     max_edge_turn_fd = 8
@@ -162,8 +110,9 @@ def build_full_graph_arcgis():
                 Evaluator is field script !travel_time_s!.
             3) Define one-way restriction. Prohibit all against direction.
             4) Define turn restrictions. Add it in source. Apply all turn restrictions.
-            5) Set costs and restrictions in the travel mode.
-            6) Build network.
+            5) Define inundation restriction. Keep it as default.
+            6) Set costs and restrictions in the travel mode.
+            7) Build network.
             Press Enter to continue.
         """
     )
@@ -178,13 +127,25 @@ def calculate_all_routes():
     incidents = pp_i.add_actual_rescue_station(incidents, rescue_station)
     incidents = pp_i.add_nearest_rescue_station(incidents, rescue_station)
     incidents = pp_i.add_period_label(incidents, period_dict)
-    road_segment = import_road_seg_w_inundation_info()
+    road_segment = pp_r.import_road_seg_w_inundation_info(dir_road_inundated, speed_assigned)
 
     route_analysis = mo.RouteAnalysis(incidents, 'Number_nearest')
     route_analysis.run_route_analysis_arcgis(
         geodatabase_addr, fd_name, nd_name, nd_layer_name,
         rescue_station, road_segment,
     )
+
+
+def calculate_incidents_with_gis_travel_time():
+    incidents = pp_i.import_incident(dir_incidents)
+    assert len(list(period_dict.values())) == 2
+    incidents = pp_i.convert_feature_class_to_df(
+        incidents,
+        f'{geodatabase_addr}/route_results',
+        ['normal'] + list(range(list(period_dict.values())[0], list(period_dict.values())[1] + 1))
+    )
+    incidents = pp_i.add_inaccessible_routes(incidents, dir_inaccessible_routes)
+    return incidents
 
 
 if __name__ == "__main__":
@@ -201,22 +162,26 @@ if __name__ == "__main__":
             '2016-10-09 00:00:00': 25,
             '2016-10-09 23:00:00': 48,
         }
+    speed_assigned = {
+            'motorway': 55, 'motorway_link': 55, 'trunk': 55, 'trunk_link': 55,
+            'primary': 55, 'primary_link': 55, 'secondary': 55, 'secondary_link': 55,
+            'tertiary': 25, 'tertiary_link': 25, 'unclassified': 25, 'residential': 25, 'service': 25,
+        }
 
     dir_rescue_station_n_nearest_geo = './data/rescue_team_location/rescue_stations_n_nearest_geo.csv'
-    dir_incidents = './data/ambulance/geocoded/20160101-20161015.csv'
+    dir_incidents = 'data/incidents/geocoded/20160101-20161015.csv'
     dir_turn = './data/roads/turn_restriction_vb_overpass.geojson'
     dir_road = "./data/roads/road_segment_vb.geojson"
     dir_road_inundated = "./data/roads/road_segment_vb_inundated.geojson"
+    dir_inaccessible_routes = "./data/incidents/inaccessible_route.json"
 
-    incidents = pp_i.import_incident(dir_incidents)
-    assert len(list(period_dict.values())) == 2
-    pp_i.convert_feature_class_to_df(
-        incidents,
-        f'{geodatabase_addr}/route_results',
-        ['normal'] + list(range(list(period_dict.values())[0], list(period_dict.values())[1] + 1))
-    )
+    # save_inundated_roads()
+    # save_rescue_data()
 
+    # build_full_graph_arcgis()
+    # calculate_all_routes()
 
+    # incidents = calculate_incidents_with_gis_travel_time()
 
 
     print()

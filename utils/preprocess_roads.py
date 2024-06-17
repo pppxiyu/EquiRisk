@@ -239,3 +239,33 @@ class InundationToSpeed:
         return speed_series
 
 
+def import_road_seg_w_inundation_info(dir_road_inundated, speed_assigned):
+    road_segment_inund = gpd.read_file(dir_road_inundated)
+    road_segment_inund = add_roads_max_speed(
+        road_segment_inund, speed_assigned,
+        'maxspeed_assigned_mile'
+    )
+
+    road_segment_inund = add_travel_time_2_seg(
+        road_segment_inund,
+        'maxspeed_assigned_mile', 'travel_time_s'
+    )
+
+    converter = InundationToSpeed(30)
+    for label in range(25, 48 + 1):
+        converter.cutoff(
+            road_segment_inund[f'max_depth_{label}']
+        )
+        converter.reduce(
+            road_segment_inund[f'mean_depth_{label}'],
+            road_segment_inund['maxspeed_assigned_mile'],
+        )
+        road_segment_inund[f'maxspeed_inundated_mile_{label}'] = converter.apply_orig_speed(
+            road_segment_inund['maxspeed_assigned_mile'],
+        )
+        road_segment_inund = add_travel_time_2_seg(
+            road_segment_inund,
+            f'maxspeed_inundated_mile_{label}', f'travel_time_s_{label}'
+        )
+    return road_segment_inund
+

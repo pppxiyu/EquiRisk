@@ -141,3 +141,32 @@ def convert_feature_class_to_df(incident, feature_class_addr, label_list):
     incident = incident.merge(df[['incident_id', 'Total_Seconds']], how='left', on='incident_id')
 
     return incident
+
+
+def add_inaccessible_routes(incidents, addr_inaccessible_routes, fill_value=-999):
+    import json
+    import numpy as np
+
+    with open(addr_inaccessible_routes, 'r') as f:
+        inaccessible_routes = json.load(f)
+    flood_period = inaccessible_routes['flood']
+    # Normal time inaccessible routes are not used, because the inaccessibility is not due to flood.
+    # This is because part of the edges are disconnected from the main road network.
+
+    r_list = []
+    for k, v in flood_period.items():
+        no_route_flood = [
+            e[1].split('"')[1] for e in v if e[1].startswith('No route for')
+        ]
+        detach_flood = [
+            e[1].split('"')[1] for e in v if e[1].startswith('Need at least 2 valid stops')
+        ]
+        r_list.append(no_route_flood + detach_flood)
+    routes = [e for l in r_list for e in l]
+
+    incident_id_list = [np.int64(i.split('-')[1]) for i in routes]
+
+    incidents.loc[incidents['incident_id'].isin(incident_id_list), 'Total_Seconds'] = fill_value
+
+    return incidents
+
