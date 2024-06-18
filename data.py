@@ -1,8 +1,9 @@
-import utils.preprocess as pp
+import utils.preprocess_station as pp_s
 import utils.preprocess_roads as pp_r
 import utils.preprocess_incidents as pp_i
 import utils.preprocess_graph as pp_g
 import utils.modeling as mo
+import utils.visualization as vis
 
 import geopandas as gpd
 import matplotlib.pyplot as plt
@@ -42,12 +43,12 @@ def save_rescue_data():
     # process rescue station data and save it
     road_intersection = gpd.read_file(f"./data/roads/road_intersection_vb.geojson")
     road_segment = gpd.read_file(f"./data/roads/road_segment_vb.geojson")
-    rescue_station = pp.import_rescue_station('./data/rescue_team_location/rescue_stations.txt')
+    rescue_station = pp_s.import_rescue_station('./data/rescue_team_location/rescue_stations.txt')
     rescue_station['nearest_segment'] = rescue_station.to_crs(crs_prj).geometry.apply(
-        lambda x: pp.add_nearest_segment(x, road_segment.to_crs(crs_prj))
+        lambda x: pp_s.add_nearest_segment(x, road_segment.to_crs(crs_prj))
     )
     rescue_station['nearest_intersection'] = rescue_station.to_crs(crs_prj).geometry.apply(
-        lambda x: pp.add_nearest_intersection(x, road_intersection.to_crs(crs_prj))
+        lambda x: pp_s.add_nearest_intersection(x, road_intersection.to_crs(crs_prj))
     )
     rescue_station.to_csv(dir_rescue_station_n_nearest_geo)
     return
@@ -122,7 +123,7 @@ def build_full_graph_arcgis():
 
 
 def calculate_all_routes():
-    rescue_station = pp.import_rescue_station(dir_rescue_station_n_nearest_geo)
+    rescue_station = pp_s.import_rescue_station(dir_rescue_station_n_nearest_geo)
     incidents = pp_i.import_incident(dir_incidents)
     incidents = pp_i.add_actual_rescue_station(incidents, rescue_station)
     incidents = pp_i.add_nearest_rescue_station(incidents, rescue_station)
@@ -146,6 +147,39 @@ def calculate_incidents_with_gis_travel_time():
     )
     incidents = pp_i.add_inaccessible_routes(incidents, dir_inaccessible_routes)
     return incidents
+
+
+def vis_gis_travel_time_error():
+    incidents_c = incidents.copy()
+    incidents_c = incidents_c[~incidents_c['Total_Seconds'].isna()]
+    incidents_c['TravelTime'] = incidents_c['TravelTime'].dt.total_seconds()
+    incidents_c['ResponseTime'] = incidents_c['ResponseTime'].dt.total_seconds()
+
+    # inaccessible routes are removed
+    incidents_c = incidents_c[incidents_c['Total_Seconds'] != -999]
+    # incidents_c.loc[incidents_c['Total_Seconds'] == -999, 'Total_Seconds'] = 1.3 * incidents_c['TravelTime']
+
+    incidents_c['diff_travel'] = incidents_c['Total_Seconds'] - incidents_c['TravelTime']
+    incidents_c['diff_response'] = incidents_c['Total_Seconds'] - incidents_c['ResponseTime']
+    incidents_c = pp_i.add_period_label(incidents_c, period_dict)
+    incidents_normal = incidents_c[incidents_c['period_label'] == '']
+    incidents_flood = incidents_c[incidents_c['period_label'] != '']
+
+    vis.mapbox_scatter_px(
+        incidents_flood[
+            (incidents_flood['diff_travel'] >= incidents_flood['diff_travel'].quantile(0.05)) &
+            (incidents_flood['diff_travel'] <= incidents_flood['diff_travel'].quantile(0.95))
+            ],
+        'diff_travel'
+    )
+
+    vis.mapbox_scatter_px(
+        incidents_normal[
+            (incidents_normal['diff_travel'] >= incidents_normal['diff_travel'].quantile(0.05)) &
+            (incidents_normal['diff_travel'] <= incidents_normal['diff_travel'].quantile(0.95))
+            ].sample(250),
+        'diff_travel'
+    )
 
 
 if __name__ == "__main__":
@@ -179,9 +213,14 @@ if __name__ == "__main__":
     # save_rescue_data()
 
     # build_full_graph_arcgis()
+
     # calculate_all_routes()
 
-    # incidents = calculate_incidents_with_gis_travel_time()
+    incidents = calculate_incidents_with_gis_travel_time()
+
+
+
+
 
 
     print()

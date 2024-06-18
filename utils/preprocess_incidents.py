@@ -93,7 +93,7 @@ def add_nearest_rescue_station(incident, rescue):
 
 
 def add_period_label(incident, label_dict):
-    from datetime import datetime
+    from datetime import datetime, timedelta
 
     incident['period_label'] = len(incident) * ['']
 
@@ -103,12 +103,15 @@ def add_period_label(incident, label_dict):
 
     start_time = datetime.strptime(start[0], '%Y-%m-%d %H:%M:%S')
     end_time = datetime.strptime(end[0], '%Y-%m-%d %H:%M:%S')
-    time_intervals = pd.date_range(start=start_time, end=end_time, freq='H').strftime('%Y-%m-%d %H:%M:%S').tolist()
+    time_intervals = pd.date_range(
+        start=start_time, end=end_time + timedelta(hours=1), freq='H'
+    ).strftime('%Y-%m-%d %H:%M:%S').tolist()
 
     start_label = start[1]
     end_label = end[1]
     labels = list(range(start_label, end_label + 1))
 
+    assert len(time_intervals) - 1 == len(labels)
     for i, l in zip(range(len(time_intervals) - 1), labels):
         t_1 = time_intervals[i]
         t_2 = time_intervals[i + 1]

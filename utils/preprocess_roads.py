@@ -1,7 +1,6 @@
 import pandas as pd
 import geopandas as gpd
 import numpy as np
-from shapely import Polygon
 import warnings
 import rasterio
 
