@@ -92,7 +92,7 @@ def add_nearest_rescue_station(incident, rescue):
     return incident
 
 
-def add_period_label(incident, label_dict):
+def add_period_label(incident, time_col, label_dict):
     from datetime import datetime, timedelta
 
     incident['period_label'] = len(incident) * ['']
@@ -116,8 +116,11 @@ def add_period_label(incident, label_dict):
         t_1 = time_intervals[i]
         t_2 = time_intervals[i + 1]
         incident.loc[
-            (incident['Call Date and Time'] >= t_1) & (incident['Call Date and Time'] <= t_2),
+            (incident[time_col] >= t_1) & (incident[time_col] <= t_2),
             'period_label'] = l
+        incident.loc[
+            (incident[time_col] >= t_1) & (incident[time_col] <= t_2),
+            'period_actual'] = pd.Series([pd.Timestamp(t_1), pd.Timestamp(t_2)]).mean()
 
     return incident
 
@@ -173,3 +176,82 @@ def add_inaccessible_routes(incidents, addr_inaccessible_routes, fill_value=-999
 
     return incidents
 
+
+def convert_timedelta_2_seconds(incidents, col_names):
+    for col in col_names:
+        incidents[col] = incidents[col].dt.total_seconds()
+    return incidents
+
+
+def add_geo_unit(incidents, dir_unit, id_col_geo):
+    unit_geo = gpd.read_file(dir_unit)
+    unit_geo = unit_geo[id_col_geo + ['geometry']]
+    unit_geo = unit_geo.to_crs(incidents.crs)
+    incidents = incidents.sjoin(unit_geo, how='left')
+    return incidents
+
+
+def import_demographic(dir_demo, value_col, remove_tract=None):
+    demographic = pd.read_csv(dir_demo)[['GEO_ID', 'NAME'] + value_col].iloc[1:]
+
+    if 'Block Group' in demographic.iloc[0]['NAME']:
+        demographic['block_group_name'] = demographic['NAME'].str.extract(r'Block Group (\d+\.?\d*)')
+    demographic['tract_name'] = demographic['NAME'].str.extract(r'Census Tract (\d+\.?\d*)')
+    demographic['city_name'] = demographic['NAME'].str.extract(r'Census Tract \d+\.?\d*, ([^,]+)')
+    assert (demographic['city_name'] == 'Virginia Beach city').all()
+
+    if remove_tract is not None:
+        demographic = demographic[~demographic['tract_name'].isin(remove_tract)]
+
+    demographic = demographic[demographic[value_col[0]] != '-']
+
+    demographic['demographic_value'] = demographic[value_col].astype(float)
+    if len(value_col) > 1:
+        demographic['demographic_value'] = demographic[value_col].sum(axis=1)
+
+    return demographic
+
+
+def merge_incidents_demographic_bg(incidents, demographic):
+    demographic['tract_name_adapt'] = '0' + (demographic['tract_name'].astype(float) * 100).astype(int).astype(str)
+    demographic['id'] = demographic['tract_name_adapt'] + demographic['block_group_name']
+    incidents['id'] = incidents['TRACTCE'] + incidents['BLKGRPCE']
+    incidents = incidents.merge(demographic, how='left', on='id')
+    return incidents
+
+
+def merge_demographic_geo_bg(demographic, dir_bg, target_county_num='810'):
+    geo = gpd.read_file(dir_bg)
+    geo = geo[geo['COUNTYFP'] == target_county_num]
+    geo['id'] = geo['TRACTCE'] + geo['BLKGRPCE']
+
+    demographic['tract_name_adapt'] = '0' + (demographic['tract_name'].astype(float) * 100).astype(int).astype(str)
+    demographic['id'] = demographic['tract_name_adapt'] + demographic['block_group_name']
+
+    demographic = demographic.merge(geo, how='left', on='id')
+    demographic = gpd.GeoDataFrame(demographic, geometry='geometry')
+    return demographic
+
+
+def merge_geo_unit_geo_bg(geo_unit, dir_bg, target_county_num='810'):
+    geo = gpd.read_file(dir_bg)
+    geo = geo[geo['COUNTYFP'] == target_county_num]
+    geo['id'] = geo['TRACTCE'] + geo['BLKGRPCE']
+
+    geo_unit = geo_unit.merge(geo, how='left', on='id')
+    geo_unit = gpd.GeoDataFrame(geo_unit, geometry='geometry')
+    return geo_unit
+
+
+def aggr_incidents_geo(incidents, period_dict, dir_bg_boundaries):
+    g_units = incidents[
+        ['id', 'diff_travel', 'demographic_value', 'wellness', 'period_actual']
+    ].groupby('id').mean()
+
+    g_units = add_period_label(g_units, 'period_actual', period_dict)
+    g_units['period_actual'] = g_units['period_actual'].apply(
+        lambda x: f"{f'{x.hour:02}:00'} - {f'{(x.hour + 1) % 24:02}:00'}"
+    )
+
+    g_units = merge_geo_unit_geo_bg(g_units, dir_bg_boundaries)
+    return g_units

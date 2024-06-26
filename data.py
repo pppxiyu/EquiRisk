@@ -2,9 +2,11 @@ import utils.preprocess_station as pp_s
 import utils.preprocess_roads as pp_r
 import utils.preprocess_incidents as pp_i
 import utils.preprocess_graph as pp_g
+import utils.preprocess_station as pp_o
 import utils.modeling as mo
 import utils.visualization as vis
 
+import pandas as pd
 import geopandas as gpd
 import matplotlib.pyplot as plt
 
@@ -127,7 +129,7 @@ def calculate_all_routes():
     incidents = pp_i.import_incident(dir_incidents)
     incidents = pp_i.add_actual_rescue_station(incidents, rescue_station)
     incidents = pp_i.add_nearest_rescue_station(incidents, rescue_station)
-    incidents = pp_i.add_period_label(incidents, period_dict)
+    incidents = pp_i.add_period_label(incidents, 'Call Date and Time', period_dict)
     road_segment = pp_r.import_road_seg_w_inundation_info(dir_road_inundated, speed_assigned)
 
     route_analysis = mo.RouteAnalysis(incidents, 'Number_nearest')
@@ -149,41 +151,78 @@ def calculate_incidents_with_gis_travel_time():
     return incidents
 
 
-def vis_gis_travel_time_error():
+def calculate_incidents_metrics():
+
+    # clean
     incidents_c = incidents.copy()
+    incidents_c = pp_i.add_period_label(incidents_c, 'Call Date and Time', period_dict)
+    incidents_c = pp_i.convert_timedelta_2_seconds(incidents_c, ['TravelTime', 'ResponseTime'])
     incidents_c = incidents_c[~incidents_c['Total_Seconds'].isna()]
-    incidents_c['TravelTime'] = incidents_c['TravelTime'].dt.total_seconds()
-    incidents_c['ResponseTime'] = incidents_c['ResponseTime'].dt.total_seconds()
+    incidents_c = incidents_c[~incidents_c['TravelTime'].isna()]
+    incidents_c = incidents_c[(incidents_c['TravelTime'] < 0) | (incidents_c['TravelTime'] >= 60)]
 
-    # inaccessible routes are removed
-    incidents_c = incidents_c[incidents_c['Total_Seconds'] != -999]
-    # incidents_c.loc[incidents_c['Total_Seconds'] == -999, 'Total_Seconds'] = 1.3 * incidents_c['TravelTime']
+    # deal with infinity
+    non_inf_over = incidents_c[
+        (incidents_c['period_label'] == '') &
+        (incidents_c['Total_Seconds'] > incidents_c['TravelTime'])
+    ]
+    non_inf_over.loc[:, ['over_rate']] = non_inf_over['Total_Seconds'] / non_inf_over['TravelTime']
+    incidents_c.loc[incidents_c['Total_Seconds'] == -999, ['Total_Seconds']] = incidents_c.loc[
+        incidents_c['Total_Seconds'] == -999, 'TravelTime'] * non_inf_over['over_rate'].median()
 
+    # numerical diff
     incidents_c['diff_travel'] = incidents_c['Total_Seconds'] - incidents_c['TravelTime']
-    incidents_c['diff_response'] = incidents_c['Total_Seconds'] - incidents_c['ResponseTime']
-    incidents_c = pp_i.add_period_label(incidents_c, period_dict)
-    incidents_normal = incidents_c[incidents_c['period_label'] == '']
-    incidents_flood = incidents_c[incidents_c['period_label'] != '']
+    incidents_c = incidents_c[~incidents_c['diff_travel'].isna()]
 
-    vis.mapbox_scatter_px(
-        incidents_flood[
-            (incidents_flood['diff_travel'] >= incidents_flood['diff_travel'].quantile(0.05)) &
-            (incidents_flood['diff_travel'] <= incidents_flood['diff_travel'].quantile(0.95))
-            ],
-        'diff_travel'
-    )
+    # categorical wellness
+    service_area_threshold = 300
+    incidents_c['false_positive'] = ((incidents_c['Total_Seconds'] <= service_area_threshold)
+                                     & (incidents_c['TravelTime'] > service_area_threshold))
+    incidents_c['false_negative'] = ((incidents_c['Total_Seconds'] > service_area_threshold)
+                                     & (incidents_c['TravelTime'] <= service_area_threshold))
+    incidents_c['wellness'] = [0] * len(incidents_c)
+    incidents_c.loc[incidents_c['false_positive'] == True, 'wellness'] = -1
+    incidents_c.loc[incidents_c['false_negative'] == True, 'wellness'] = 1
+    incidents_c = incidents_c[~incidents_c['wellness'].isna()]
 
-    vis.mapbox_scatter_px(
-        incidents_normal[
-            (incidents_normal['diff_travel'] >= incidents_normal['diff_travel'].quantile(0.05)) &
-            (incidents_normal['diff_travel'] <= incidents_normal['diff_travel'].quantile(0.95))
-            ].sample(250),
-        'diff_travel'
+    # add demo info
+    # incidents_c = pp_i.add_geo_unit(incidents_c, dir_tract_boundaries, ['NAME'])
+    # demographic = pp_i.import_demographic(
+    #     dir_income_tract, ['S1901_C01_012E'],  # Households!!Estimate!!Median income (dollars)
+    #     # dir_edu, ['S1501_C02_015E'],  # Percent!!Estimate!!Percent bachelor's degree or higher
+    #     # dir_population, ['DP05_0021E'],  # Estimate!!SEX AND AGE!!65 years and over
+    #     # dir_population,[
+    #     #     'DP05_0004E', 'DP05_0005E'
+    #     # ],  # Estimate!!SEX AND AGE!!Under 5 years | Estimate!!SEX AND AGE!!5 to 9 years
+    #     # dir_population, [
+    #     #     'DP05_0059PE'
+    #     # ],  # Percent!!RACE!!Race alone or in combination with one or more other races!!Total population!!White
+    #     ['9901'],
+    # )
+    # incidents_c = incidents_c.merge(demographic, how='left', left_on='NAME', right_on='tract_name')
+
+    incidents_c = pp_i.add_geo_unit(incidents_c, dir_bg_boundaries, ['TRACTCE', 'BLKGRPCE'])
+    demo = pp_i.import_demographic(
+        dir_income_bg, ['B19013_001E'],  # Median household income in the past 12 months
+        ['9901'],
     )
+    incidents_c = pp_i.merge_incidents_demographic_bg(incidents_c, demo)
+
+    # split
+    incidents_f = incidents_c[incidents_c['period_label'] != '']
+    incidents_n = incidents_c[incidents_c['period_label'] == '']
+
+    # demo w geo
+    demo = pp_i.merge_demographic_geo_bg(demo, dir_bg_boundaries)
+
+    # aggr to geo units
+    g_units_f = pp_i.aggr_incidents_geo(incidents_f, period_dict, dir_bg_boundaries)
+    g_units_n = pp_i.aggr_incidents_geo(incidents_n, period_dict, dir_bg_boundaries)
+
+    return incidents_f, incidents_n, demo, g_units_f, g_units_n
 
 
 if __name__ == "__main__":
-
     crs_prj = 'epsg:32633'
 
     geodatabase_addr = './gis_analysis/arcgis_emergency_service_routing/arcgis_emergency_service_routing.gdb'
@@ -193,14 +232,14 @@ if __name__ == "__main__":
     turn_name = 'turn_restriction'
 
     period_dict = {
-            '2016-10-09 00:00:00': 25,
-            '2016-10-09 23:00:00': 48,
-        }
+        '2016-10-09 00:00:00': 25,
+        '2016-10-09 23:00:00': 48,
+    }
     speed_assigned = {
-            'motorway': 55, 'motorway_link': 55, 'trunk': 55, 'trunk_link': 55,
-            'primary': 55, 'primary_link': 55, 'secondary': 55, 'secondary_link': 55,
-            'tertiary': 25, 'tertiary_link': 25, 'unclassified': 25, 'residential': 25, 'service': 25,
-        }
+        'motorway': 55, 'motorway_link': 55, 'trunk': 55, 'trunk_link': 55,
+        'primary': 55, 'primary_link': 55, 'secondary': 55, 'secondary_link': 55,
+        'tertiary': 25, 'tertiary_link': 25, 'unclassified': 25, 'residential': 25, 'service': 25,
+    }
 
     dir_rescue_station_n_nearest_geo = './data/rescue_team_location/rescue_stations_n_nearest_geo.csv'
     dir_incidents = 'data/incidents/geocoded/20160101-20161015.csv'
@@ -208,24 +247,43 @@ if __name__ == "__main__":
     dir_road = "./data/roads/road_segment_vb.geojson"
     dir_road_inundated = "./data/roads/road_segment_vb_inundated.geojson"
     dir_inaccessible_routes = "./data/incidents/inaccessible_route.json"
+    dir_tract_boundaries = './data/boundaries/cb_2016_51_tract_500k/cb_2016_51_tract_500k.shp'
+    dir_bg_boundaries = './data/boundaries/tl_2017_51_bg/tl_2017_51_bg.shp'
+    dir_edu = './data/demographic/S1501/ACSST5Y2016.S1501-Data.csv'
+    dir_income_tract = './data/demographic/S1901/ACSST5Y2016.S1901-Data.csv'
+    dir_income_bg = './data/demographic/B19013/ACSDT5Y2016.B19013-Data.csv'
+    dir_population = './data/demographic/DP05/ACSDP5Y2016.DP05-Data.csv'
 
+    ########
     # save_inundated_roads()
     # save_rescue_data()
-
     # build_full_graph_arcgis()
-
     # calculate_all_routes()
 
     incidents = calculate_incidents_with_gis_travel_time()
+    incidents_flood, incidents_normal, _, geo_units_flood, geo_units_normal = calculate_incidents_metrics()
 
-
-
+    ########
+    # vis.scatter_demo_vs_error_w_period(
+    #     geo_units_flood, 'demographic_value',
+    #     'diff_travel', 'period_label', 'period_actual',
+    #     'Median household income (US dollar) ', 'Travel time estimation error (s)'
+    # )
+    # vis.scatter_demo_vs_error(
+    #     geo_units_normal, 'demographic_value',
+    #     'diff_travel',
+    #     'Median household income (US dollar) ', 'Travel time estimation error (s)'
+    # )
+    #
+    # vis.map_error(geo_units_flood, 'diff_travel')
+    # vis.map_demo(geo_units_flood, 'demographic_value', 'Median house income (US dollar)')
+    #
+    # vis.line_cut_n_ave_wellness(
+    #     geo_units_normal,
+    #     [round(x * 0.05, 2) for x in range(2, 11)],
+    #     'range',
+    # )
 
 
 
     print()
-
-
-
-
-
