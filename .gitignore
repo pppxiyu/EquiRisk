@@ -10,3 +10,4 @@ legacy/
 cache/
 gis_analysis/
 PIN/
+.gitignore
