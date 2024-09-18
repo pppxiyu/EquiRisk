@@ -126,8 +126,17 @@ def add_travel_time_2_seg(roads, maxspeed_name, travel_time_name):
     return roads
 
 
-def add_water_depth_on_roads(roads, inundation_tif_addr, label, new_col_name, remove_bridge=True):
+def add_water_depth_on_roads_w_bridge(
+        roads, inundation_tif_addr, label, new_col_name,
+        remove_bridge=True,
+        remove_inundation_under_bridge=False, geo_w_bridge=None,
+):
     from rasterio.features import shapes
+    import warnings
+
+    assert not (remove_bridge and remove_inundation_under_bridge)
+    if remove_inundation_under_bridge:
+        assert geo_w_bridge is not None
 
     inundation = rasterio.open(inundation_tif_addr)
     results = (
@@ -141,21 +150,103 @@ def add_water_depth_on_roads(roads, inundation_tif_addr, label, new_col_name, re
     assert polygons.crs == roads.crs, 'CRS inconsistent.'
 
     polygons = polygons[polygons['val'] != polygons['val'].max()]
-    warnings.warn('It is assumed that the no data value was set to a very big number by ArcGIS.')
+    warnings.warn('It is assumed that the "no" data value was set to a very big number by ArcGIS.')
 
+    if remove_inundation_under_bridge:  # delete inundations under bridges
+        geo_w_bridge = geo_w_bridge.to_crs(roads.crs)
+        bridge_geo = geo_w_bridge[~geo_w_bridge['bridge'].isna()]
+        non_bridge_geo = geo_w_bridge[geo_w_bridge['bridge'].isna()]
+
+        # overhead bridge location is untouched, road under overhead bridge could be inundated
+        # the inundation calculation for the overhead bridge is not correct
+        bridge_covered = bridge_geo.loc[
+            bridge_geo.sjoin(polygons, how='inner', predicate='intersects').index.unique()
+        ]
+        overhead_bridge = get_overhead_bridge(bridge_covered, non_bridge_geo, plot=False)
+
+        polygons_c = polygons.copy()
+        inundation_2_go = bridge_geo[~bridge_geo.index.isin(overhead_bridge)].sjoin(
+            polygons.reset_index(), how='inner', predicate='intersects'
+        )
+        polygons = polygons[~polygons.index.isin(inundation_2_go['index_right'].tolist())]
+
+        # calculate only for overhead bridge
+        polygons_c = polygons_c[~polygons_c.index.isin(
+            bridge_geo.sjoin(
+                polygons_c.reset_index(), how='inner', predicate='intersects'
+            )['index_right'].tolist()
+        )]
+
+        ov_bridge_s2_list = []
+        for o in overhead_bridge:
+            ov_bridge = bridge_covered[bridge_covered.index == o]
+            assert len(ov_bridge) == 1
+            ov_bridge_s2_info = get_corresponding_road(ov_bridge, roads, top=1)
+            ov_bridge_s2_list.append([i[0] for i in ov_bridge_s2_info])
+
+        ov_bridge_s2 = roads[roads.index.isin([i for l in ov_bridge_s2_list for i in l])]
+        ov_bridge_s2 = get_water_depth(ov_bridge_s2, polygons_c, new_col_name, label)
+
+    roads = get_water_depth(roads, polygons, new_col_name, label)
+
+    if remove_bridge is True:
+        roads.loc[roads['bridge'] == 'yes', f'{new_col_name["max"]}_{label}'] = np.nan
+        roads.loc[roads['bridge'] == 'yes', f'{new_col_name["mean"]}_{label}'] = np.nan
+
+    if remove_inundation_under_bridge:
+        roads.iloc[ov_bridge_s2.index] = ov_bridge_s2.iloc[0]
+
+    return roads
+
+
+def get_water_depth(roads, polygons,new_col_name, label):
     inundated_roads = roads.copy().sjoin(polygons, how='inner', predicate='intersects')
 
     inundated_roads_max = inundated_roads[['val']].groupby(inundated_roads.index).max()
     inundated_roads_mean = inundated_roads[['val']].groupby(inundated_roads.index).mean()
 
-    roads[f"{new_col_name['max']}_{label}"] = inundated_roads_max['val']
-    roads[f"{new_col_name['mean']}_{label}"] = inundated_roads_mean['val']
+    roads_c = roads.copy()
+    roads_c.loc[:, f"{new_col_name['max']}_{label}"] = inundated_roads_max['val']
+    roads_c.loc[:, f"{new_col_name['mean']}_{label}"] = inundated_roads_mean['val']
 
-    if remove_bridge:
-        roads.loc[roads['bridge'] == 'yes', f'{new_col_name["max"]}_{label}'] = np.nan
-        roads.loc[roads['bridge'] == 'yes', f'{new_col_name["mean"]}_{label}'] = np.nan
+    return roads_c
 
-    return roads
+
+def get_overhead_bridge(bridge_geo, non_bridge_geo, plot=True):
+    if plot:
+        import matplotlib.pyplot as plt
+    overhead_bridge_list = []
+    for i, row in bridge_geo.iterrows():
+        crossed = non_bridge_geo[non_bridge_geo.crosses(row['geometry'])]
+        if len(crossed) != 0:
+            if plot:
+                gdf_row = gpd.GeoDataFrame(pd.DataFrame([row]), crs=bridge_geo.crs)
+                crossed_roads = pd.concat([gdf_row, crossed], ignore_index=True)
+                crossed_roads.plot()
+                plt.show()
+            warnings.warn(f'Overhead bridge with index {i} is overlapped with inundation.')
+            overhead_bridge_list.append(i)
+    return overhead_bridge_list
+
+
+def get_corresponding_road(road, roads, top=1, bf=10):
+    assert isinstance(road, gpd.GeoDataFrame)
+    assert isinstance(roads, gpd.GeoDataFrame)
+    assert len(road) == 1
+
+    road = road.to_crs('epsg:2284')
+    road.loc[:, 'geometry'] = road.geometry.buffer(bf)
+
+    roads = roads.to_crs(road.crs)
+    candidate_roads = gpd.sjoin(roads, road, how='inner', predicate='intersects')
+
+    overlapping_degree = []
+    for i, c in candidate_roads.iterrows():
+        overlap = road.iloc[0:1].geometry.intersection(c.geometry).length.values[0]
+        overlapping_degree.append([i, overlap])
+
+    overlapping_degree_sorted = sorted(overlapping_degree, key=lambda x: x[1], reverse=True)
+    return overlapping_degree_sorted[:top]
 
 
 class InundationToSpeed:
@@ -196,16 +287,16 @@ class InundationToSpeed:
     def reduce(self, depth_series, maxspeed_series):
         if self.unit_checker:
             input('For reduce(), the input water depth should be ft, speed is mile/h. Enter to continue.')
-        self.speed_unique = maxspeed_series.unique()
 
         speed_df = pd.DataFrame(index=maxspeed_series.index)
         speed_df['speed'] = [np.nan] * len(speed_df)
 
-        self.build_decreasing_curve()
-
         maxspeed_series = maxspeed_series[(depth_series * 30.48 < self.thr) & (depth_series * 30.48 > 0)]
         depth_series = depth_series[(depth_series * 30.48 < self.thr) & (depth_series * 30.48 > 0)]
         speed_df['depth'] = depth_series
+
+        self.speed_unique = maxspeed_series.unique()
+        self.build_decreasing_curve()
 
         for s in self.speed_unique:
             curve = self.curves[s]
@@ -238,33 +329,263 @@ class InundationToSpeed:
         return speed_series
 
 
-def import_road_seg_w_inundation_info(dir_road_inundated, speed_assigned):
-    road_segment_inund = gpd.read_file(dir_road_inundated)
-    road_segment_inund = add_roads_max_speed(
-        road_segment_inund, speed_assigned,
+def import_road_seg_w_inundation_info(dir_road_inundated, speed_assigned, VDOT_speed=None, osm_match_vdot=None):
+    road_segment_inundation = gpd.read_file(dir_road_inundated)
+    road_segment_inundation = add_roads_max_speed(
+        road_segment_inundation, speed_assigned,
         'maxspeed_assigned_mile'
     )
-
-    road_segment_inund = add_travel_time_2_seg(
-        road_segment_inund,
+    road_segment_inundation = add_travel_time_2_seg(
+        road_segment_inundation,
         'maxspeed_assigned_mile', 'travel_time_s'
     )
 
+    if VDOT_speed is not None:  # if traffic simulation is involved, updated the normal speeds
+        assert osm_match_vdot is not None, 'Match info is missing.'
+        match_info = gpd.read_file(osm_match_vdot)
+
+        for l in range(25, 48 + 1):
+            road_segment_inundation = add_VDOT_speed(
+                road_segment_inundation, VDOT_speed, l, match_info, 25,  # label 25 is at UTC 00:00
+            )
+
+    ll = ''
     converter = InundationToSpeed(30)
-    for label in range(25, 48 + 1):
+    for l in range(25, 48 + 1):
+
+        if VDOT_speed is not None:  # if traffic simulation is involved, use the updated speed
+            ll = f'_{l}'
+
         converter.cutoff(
-            road_segment_inund[f'max_depth_{label}']
+            road_segment_inundation[f'max_depth_{l}']
         )
         converter.reduce(
-            road_segment_inund[f'mean_depth_{label}'],
-            road_segment_inund['maxspeed_assigned_mile'],
+            road_segment_inundation[f'mean_depth_{l}'],
+            road_segment_inundation[f'maxspeed_assigned_mile{ll}'],
         )
-        road_segment_inund[f'maxspeed_inundated_mile_{label}'] = converter.apply_orig_speed(
-            road_segment_inund['maxspeed_assigned_mile'],
+        road_segment_inundation[f'maxspeed_inundated_mile_{l}'] = converter.apply_orig_speed(
+            road_segment_inundation[f'maxspeed_assigned_mile{ll}'],
         )
-        road_segment_inund = add_travel_time_2_seg(
-            road_segment_inund,
-            f'maxspeed_inundated_mile_{label}', f'travel_time_s_{label}'
+        road_segment_inundation = add_travel_time_2_seg(
+            road_segment_inundation,
+            f'maxspeed_inundated_mile_{l}', f'travel_time_s_{l}'
         )
-    return road_segment_inund
+    return road_segment_inundation
+
+
+def add_VDOT_speed(road_segment, VDOT_speed, time_label, match_info, time_label_offset=0):
+    time_label_updated = time_label - time_label_offset
+    do = False
+    for k, v in VDOT_speed.items():
+        start_time = int(k.split('-')[0])  # left end is closed
+        end_time = int(k.split('-')[1])  # right end is open
+        if end_time > start_time:  # same day
+            if (time_label_updated >= start_time) and (time_label_updated < end_time):
+                do = True
+        if end_time < start_time:  # cross day
+            if ((time_label_updated >= start_time) and (time_label_updated < 24)) or (
+                    (time_label_updated >= 0) and (time_label_updated < end_time)
+            ):
+                do = True
+
+        if do is True:
+            road_segment.loc[:, f'maxspeed_assigned_mile_{time_label}'] = road_segment[
+                'maxspeed_assigned_mile'
+            ]
+            road_segment_add_match = road_segment.merge(
+                match_info[['geometry', 'vdot_id']], how='left', on='geometry'
+            ).merge(
+                v[['CSPD_1', 'ID']], how='left', left_on='vdot_id', right_on='ID'
+            )
+            road_segment.loc[
+                ~road_segment_add_match['CSPD_1'].isna(), f'maxspeed_assigned_mile_{time_label}'
+            ] = road_segment_add_match.loc[
+                ~road_segment_add_match['CSPD_1'].isna(), 'CSPD_1'
+            ]
+            road_segment[f'maxspeed_assigned_mile_{time_label}'] = road_segment[
+                f'maxspeed_assigned_mile_{time_label}'
+            ].round(2)
+    assert do is True, 'time_label is not matched with VDOT_speed info.'
+    return road_segment
+
+
+def merge_road_info_VDOT(dir_shape, dir_info):
+    from simpledbf import Dbf5
+    road_shp = gpd.read_file(dir_shape)
+    road_info = Dbf5(dir_info).to_dataframe()
+    road_info = road_info[road_info['COUNTY'] == 5]  # keep records for VB
+    road_shp = road_shp.merge(road_info, on=['A', 'B'], how='inner')
+    road_shp = gpd.GeoDataFrame(road_shp, geometry=road_shp['geometry'])
+    return road_shp
+
+
+def match_osm_n_VDOT(dir_osm, dir_VDOT, dir_save, not_service=True, dir_VDOT_info=None):
+
+    df_osm = gpd.read_file(dir_osm)
+    df_vdot = gpd.read_file(dir_VDOT)
+
+    if dir_VDOT_info is not None:
+        df_vdot = merge_road_info_VDOT(dir_VDOT, dir_VDOT_info)
+    if not_service:
+        df_osm = df_osm[df_osm['highway'] != 'service']
+
+    def get_vdot_match(row):
+        match_list = get_corresponding_road(
+            gpd.GeoDataFrame(row.to_frame().T, geometry='geometry').set_crs(df_osm.crs),
+            df_vdot, top=1
+        )
+        if match_list != []:
+            return match_list[0][0]
+        else:
+            return None
+
+    df_osm['match_index'] = df_osm.apply(get_vdot_match, axis=1)
+    df_osm = df_osm.merge(df_vdot[['ID']].reset_index(), left_on='match_index', right_on='index', how='left')
+    df_osm = df_osm[['u', 'v', 'osmid', 'name', 'length', 'geometry', 'ID']]
+    df_osm = df_osm.rename(columns={'ID': 'vdot_id'})
+    df_osm.to_file(dir_save, driver='GeoJSON')
+
+    return
+
+
+def get_middle_hour(hours):
+    if len(hours) != 2:
+        raise ValueError("The list must contain exactly two integers representing hours.")
+
+    h1, h2 = hours
+    if h1 > h2:
+        h1, h2 = h2, h1
+
+    direct_mid = (h1 + h2) // 2
+    wrap_around_mid = (h1 + h2 + 24) // 2 % 24
+
+    if h2 - h1 <= 12:
+        return direct_mid
+    else:
+        return wrap_around_mid
+
+
+def get_time_label(period_dict):
+    from datetime import datetime, timedelta
+
+    start_time = datetime.strptime(list(period_dict.keys())[0], '%Y-%m-%d %H:%M:%S')
+    end_time = datetime.strptime(list(period_dict.keys())[1], '%Y-%m-%d %H:%M:%S')
+
+    start_count = list(period_dict.values())[0]
+
+    num_hours = int((end_time - start_time).total_seconds() // 3600)
+
+    result_dict = {}
+    for i in range(num_hours + 1):
+        current_time = start_time + timedelta(hours=i)
+        current_count = start_count + i
+        result_dict[current_time.strftime('%Y-%m-%d %H:%M:%S')] = current_count
+
+    return result_dict
+
+
+def merge_inundation_info_2_net(dir_net, dir_road, period_dict, period_split, table_name):
+    import sqlite3
+
+    conn = sqlite3.connect(dir_net)
+    sim_net = pd.read_sql_query('SELECT * FROM ' + table_name, conn)
+    sim_shp = gpd.read_file(dir_road)
+    sim_net['A'] = sim_net['a']
+    sim_net['B'] = sim_net['b']
+
+    new_sim_net = {}
+    labels = get_time_label(period_dict)
+    for k, v in period_split.items():
+        h = get_middle_hour(v)
+        label = labels[f'2016-10-09 {h:02}:00:00']
+        new_sim_net[k] = [
+            label,
+            sim_net.copy().merge(
+                sim_shp[['A', 'B', f'max_depth_{label}', f'mean_depth_{label}']],
+                on=['A', 'B'], how='left',
+            ).drop_duplicates(
+                subset=['A', 'B'], keep='first'
+            ).drop(
+                columns=['A', 'B']
+            )
+        ]
+
+    return new_sim_net
+
+
+def edit_net_using_inundation(net):
+    converter = InundationToSpeed(30)
+    new_net = {}
+    for k, v in net.items():
+        l = v[0]
+        df = v[1]
+        df['dummy_speed'] = [1] * len(df)
+        converter.cutoff(df[f'max_depth_{l}'])
+        converter.reduce(df[f'mean_depth_{l}'], df['dummy_speed'], )
+        df['dummy_speed_inundated'] = converter.apply_orig_speed(df['dummy_speed'], )
+
+        # df = df[df['dummy_speed_inundated'] != 1e-05]
+        df.loc[:, 'length'] = df['length'] / df['dummy_speed_inundated']
+        df.loc[:, 'distance'] = df['distance'] / df['dummy_speed_inundated']
+
+        df = df.drop(
+            columns=['dummy_speed', 'dummy_speed_inundated'] + list(df.filter(regex='_depth_').columns)
+        )
+        new_net[k] = df
+
+    return new_net
+
+
+def edit_net_sqlite(original_sql, new_sql, nets, period_split, table_name):
+    import os
+    import shutil
+    import sqlite3
+
+    original_name = original_sql.split('/')[-1]
+    for k, v in period_split.items():
+        new_name = f'{k}_{original_name}'
+        new_dir = f'{new_sql}/{new_name}'
+        shutil.copy(original_sql, new_dir)
+        df = nets[k]
+
+        # create a new table with format
+        conn = sqlite3.connect(new_dir)
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT sql FROM sqlite_master WHERE type='table' AND name='{table_name}';")
+        command = cursor.fetchone()[0]
+        command = command.replace(f'{table_name}', f'{table_name}__edited')
+        cursor.execute(command)
+        conn.commit()
+
+        # delete the old one and insert new info with the old table name
+        conn = sqlite3.connect(new_dir)
+        conn.execute(f'DROP TABLE IF EXISTS {table_name}')
+        df.to_sql(table_name, conn, if_exists='replace', index=False)
+        conn.commit()
+
+        # convert format to the new table
+        conn = sqlite3.connect(new_dir)
+        cursor = conn.cursor()
+        cursor.execute(f"PRAGMA table_info({table_name}__edited);")
+        sql_col = cursor.fetchall()
+        assert len(sql_col) == len(df.columns)
+
+        command_head = f'INSERT INTO {table_name}__edited ('
+        command_body = 'SELECT '
+        for c, t in zip(df.columns, sql_col):
+            command_head += f'{c}, '
+            command_body += f'CAST({c} AS {t[2]}), '
+        command_head = command_head[:-2] + ') '
+        command_body = command_body[:-2] + ' '
+        command = command_head + command_body + f'FROM {table_name};'
+        cursor.execute(command)
+        conn.commit()
+
+        # delete wrong schema and rename the new one
+        conn.execute(f'DROP TABLE IF EXISTS {table_name}')
+        # cursor.execute(f"ALTER TABLE {table_name}__edited RENAME TO {table_name};")
+        input('Renaming does not work because rtree is not properly configured for the geometry column.'
+              'Using DB browser to rename manually. Continue?')
+
+    return
 

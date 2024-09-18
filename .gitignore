@@ -1,3 +1,4 @@
+.ipynb_checkpoints/
 .idea/
 __pycache__/
 data/
@@ -5,6 +6,7 @@ outputs/
 manuscripts/
 presentations/
 fig/
-.ipynb_checkpoints/
+legacy/
 cache/
 gis_analysis/
+PIN/

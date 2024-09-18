@@ -75,6 +75,19 @@ def import_incident(address):
     return data
 
 
+def import_incidents_add_info(dir_incidents, rescue_station, period_dict, routing_nearest=None):
+    incidents = import_incident(dir_incidents)
+    incidents = add_actual_rescue_station(incidents, rescue_station)
+    if routing_nearest is not None:
+        incidents = add_nearest_rescue_station(
+            incidents, rescue_station, routing_nearest=routing_nearest, mode='routing'
+        )
+    else:
+        incidents = add_nearest_rescue_station(incidents, rescue_station, mode='geometric')
+    incidents = add_period_label(incidents, 'Call Date and Time', period_dict)
+    return incidents
+
+
 def add_actual_rescue_station(incident, rescue):
     rescue = rescue.drop('geometry', axis=1)
     incident = incident[incident['Rescue Squad Number'].isin(rescue.Number.to_list())]
@@ -82,14 +95,35 @@ def add_actual_rescue_station(incident, rescue):
     return incident
 
 
-def add_nearest_rescue_station(incident, rescue):
+def add_nearest_rescue_station(incident, rescue, routing_nearest=None, mode='routing'):
+    if mode == 'routing':
+        assert routing_nearest is not None, "Specify nearest stations with routing dist. using external file. "
+
     original_crs = incident.crs
     incident = incident.to_crs('epsg:32633')
     rescue = rescue.to_crs('epsg:32633')
     assert rescue.crs == incident.crs
-    incident = incident.sjoin_nearest(rescue, how='left', lsuffix='actual', rsuffix='nearest')
-    incident = incident.to_crs(original_crs)
-    return incident
+
+    if mode == 'geometric':
+        incident_new = incident.sjoin_nearest(rescue, how='left', lsuffix='actual', rsuffix='nearest')
+        incident_new = incident_new.to_crs(original_crs)
+    elif mode == 'routing':
+        import pandas as pd
+        nearest_station = pd.read_csv(routing_nearest)
+        time_cols = ['Call_Date_and_Time', 'Entry_Date_and_Time', 'Dispatch_Date_and_Time']
+        for col in time_cols:
+            nearest_station[col] = pd.to_datetime(nearest_station[col])
+            nearest_station[col] = nearest_station[col].dt.tz_localize('America/New_York')
+            nearest_station[col.replace('_', ' ')] = nearest_station[col].dt.tz_convert('UTC')
+        incident_new = incident.merge(
+            nearest_station[[i.replace('_', ' ') for i in time_cols] + ['Number']],
+            how='left', suffixes=('_actual', '_nearest'),
+            on=['Call Date and Time', 'Entry Date and Time', 'Dispatch Date and Time'],
+        )
+        assert len(incident) == len(incident_new), "DFs are inconsistent after merge."
+    else:
+        raise ValueError(f'Mode not specified')
+    return incident_new
 
 
 def add_period_label(incident, time_col, label_dict):
@@ -125,18 +159,18 @@ def add_period_label(incident, time_col, label_dict):
     return incident
 
 
-def convert_feature_class_to_df(incident, feature_class_addr, label_list):
+def convert_feature_class_to_df(incident, feature_class_addr, label_list, mode_label=''):
     import arcpy
     import warnings
 
     df_list = []
     for l in label_list:
         if arcpy.Exists(f'{feature_class_addr}_{l}') is not True:
-            warnings.warn(f'route_results_{l} is missing')
+            warnings.warn(f'route_results_{l}{mode_label} is missing')
             continue
 
         arr = arcpy.da.FeatureClassToNumPyArray(
-            f'{feature_class_addr}_{l}', ('Name', 'Total_Seconds')
+            f'{feature_class_addr}_{l}{mode_label}', ('Name', 'Total_Seconds')
         )
         df = pd.DataFrame(arr)
         df['rescue_name'] = df['Name'].str.split('-').str[0]
@@ -255,3 +289,42 @@ def aggr_incidents_geo(incidents, period_dict, dir_bg_boundaries):
 
     g_units = merge_geo_unit_geo_bg(g_units, dir_bg_boundaries)
     return g_units
+
+
+def delete_outlier_zscore(df, col, threshold=3):
+    from scipy import stats
+    import numpy as np
+
+    for c in col:
+        df = df[
+            (np.abs(stats.zscore(df[c].values)) < 3)
+        ]
+
+    return df
+
+
+def delete_outlier_mahalanobis(df, col):
+    import numpy as np
+
+    df_c = df[col]
+
+    mean = np.mean(df_c.values, axis=0).reshape(1, -1)
+    inv_cov_matrix = np.linalg.inv(np.cov(df_c, rowvar=False))
+    def mahalanobis_distance(x, mean, inv_cov_matrix):
+        x_minus_mean = x - mean
+        left_term = np.dot(x_minus_mean, inv_cov_matrix)
+        mahal = np.dot(left_term, x_minus_mean.T)
+        return mahal.diagonal()
+
+    df_c.loc[:, ['Mahalanobis']] = df_c.apply(
+        lambda row: mahalanobis_distance(row.values.reshape(1, -1), mean, inv_cov_matrix),
+        axis=1
+    )
+
+    # threshold = 9.21  # Corresponds to chi-squared value with 2 degrees of freedom at p=0.01
+    # threshold = 7.378  # Corresponds to chi-squared value with 2 degrees of freedom at p=0.025
+    threshold = 5.991  # Corresponds to chi-squared value with 2 degrees of freedom at p=0.05
+    df = df[df_c['Mahalanobis'] <= threshold]
+
+    return df
+

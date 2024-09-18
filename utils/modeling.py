@@ -54,10 +54,11 @@ def run_service_area_analysis_arcgis(
 
 
 class RouteAnalysis:
-    def __init__(self, incidents, rescue_station_col):
+    def __init__(self, incidents, rescue_station_col, mode_label=''):
         self.incidents = incidents
         self.rescue_station_col = rescue_station_col
         self.num_sampling = None
+        self.mode_label = mode_label
 
     def init_route_analysis_arcgis(
             self, nd_layer_name, rescue_station, incidents,
@@ -111,7 +112,7 @@ class RouteAnalysis:
     def run_route_analysis_arcgis(
             self,
             geodatabase_addr, fd_name, nd_name, nd_layer_name,
-            rescue_station, roads,
+            rescue_station, roads, if_do_normal=True,
     ):
         import warnings
         import json
@@ -125,20 +126,21 @@ class RouteAnalysis:
 
         inaccessible_route_normal = []
         if '' in period_list:
-            incidents_select = self.incidents[self.incidents['period_label'] == '']
-            route_analyst = self.init_route_analysis_arcgis(
-                nd_layer_name, rescue_station, incidents_select,
-            )
-            route_result = route_analyst.solve()
-            route_result.export(
-                arcpy.nax.RouteOutputDataType.Routes, f'{geodatabase_addr}/route_results_normal',
-            )
-            if route_result.isPartialSolution:
-                warnings.warn(
-                    f"{len(incidents_select) - route_result.count(arcpy.nax.RouteOutputDataType.Routes)} "
-                    f"routes are missing when do for normal.")
-                error_list = route_result.solverMessages(arcpy.nax.MessageSeverity.All)
-                inaccessible_route_normal = [e[1].split('"')[1] for e in error_list if e[1].startswith('No route for')]
+            if if_do_normal:
+                incidents_select = self.incidents[self.incidents['period_label'] == '']
+                route_analyst = self.init_route_analysis_arcgis(
+                    nd_layer_name, rescue_station, incidents_select,
+                )
+                route_result = route_analyst.solve()
+                route_result.export(
+                    arcpy.nax.RouteOutputDataType.Routes, f'{geodatabase_addr}/route_results_normal_o',
+                )
+                if route_result.isPartialSolution:
+                    warnings.warn(
+                        f"{len(incidents_select) - route_result.count(arcpy.nax.RouteOutputDataType.Routes)} "
+                        f"routes are missing when do for normal.")
+                    error_list = route_result.solverMessages(arcpy.nax.MessageSeverity.All)
+                    inaccessible_route_normal = [e[1].split('"')[1] for e in error_list if e[1].startswith('No route for')]
 
         inaccessible_route_flood_list = {}
         if [i for i in period_list if i != ''] != []:
@@ -159,7 +161,7 @@ class RouteAnalysis:
                 )
                 route_result = route_analyst.solve()
                 route_result.export(
-                    arcpy.nax.RouteOutputDataType.Routes, f'{geodatabase_addr}/route_results_{label}',
+                    arcpy.nax.RouteOutputDataType.Routes, f'{geodatabase_addr}/route_results_{label}{self.mode_label}',
                 )
                 if route_result.isPartialSolution:
                     warnings.warn(
