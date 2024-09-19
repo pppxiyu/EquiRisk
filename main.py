@@ -2,13 +2,10 @@ import utils.preprocess_station as pp_s
 import utils.preprocess_roads as pp_r
 import utils.preprocess_incidents as pp_i
 import utils.preprocess_graph as pp_g
-import utils.preprocess_station as pp_o
-import utils.modeling as mo
+import model as mo
 import utils.visualization as vis
 
-import pandas as pd
 import geopandas as gpd
-import matplotlib.pyplot as plt
 
 import os
 
@@ -172,19 +169,45 @@ def calculate_all_routes():
     #     rescue_sta, road_segment,
     # )
 
-    # OP3: daily congestion
+    # # OP3: everyday congestion
+    # road_segment_VDOT = {
+    #     '9-13': pp_r.merge_road_info_VDOT(
+    #         dir_road_cube6, f'{dir_road_cube6_out_c}/AM_PK_FDBKNET_LINK.dbf'
+    #     ),
+    #     '13-19': pp_r.merge_road_info_VDOT(
+    #         dir_road_cube6, f'{dir_road_cube6_out_c}/Md_OP_FDBKNET_LINK.dbf'
+    #     ),
+    #     '19-22': pp_r.merge_road_info_VDOT(
+    #         dir_road_cube6, f'{dir_road_cube6_out_c}/PM_PK_FDBKNET_LINK.dbf'
+    #     ),
+    #     '22-9': pp_r.merge_road_info_VDOT(
+    #         dir_road_cube6, f'{dir_road_cube6_out_c}/Nt_OP_FDBKNET_LINK.dbf'
+    #     ),
+    # }  # NOTE: UTC TIME !!! 2016-10-09 was in EDT.  Local time  + 4 hours = UTC time.
+    # road_segment = pp_r.import_road_seg_w_inundation_info(
+    #     dir_road_inundated, speed_assigned,
+    #     VDOT_speed=road_segment_VDOT,
+    #     osm_match_vdot=dir_match_osm_n_VDOT,
+    # )
+    # route_analysis = mo.RouteAnalysis(incidents, 'Number_nearest', mode_label='_daily_c')
+    # route_analysis.run_route_analysis_arcgis(
+    #     geodatabase_addr, fd_name, nd_name, nd_layer_name,
+    #     rescue_sta, road_segment, if_do_normal=False,
+    # )
+
+    # OP4: flooding congestion
     road_segment_VDOT = {
         '9-13': pp_r.merge_road_info_VDOT(
-            dir_road_cube6, f'{dir_road_cube6_out_c}/AM_PK_FDBKNET_LINK.dbf'
+            dir_road_cube6, f'{dir_road_cube6_out_d}_AM_PK/AM_PK_FDBKNET_LINK.dbf'
         ),
         '13-19': pp_r.merge_road_info_VDOT(
-            dir_road_cube6, f'{dir_road_cube6_out_c}/Md_OP_FDBKNET_LINK.dbf'
+            dir_road_cube6, f'{dir_road_cube6_out_d}_Md_OP/Md_OP_FDBKNET_LINK.dbf'
         ),
         '19-22': pp_r.merge_road_info_VDOT(
-            dir_road_cube6, f'{dir_road_cube6_out_c}/PM_PK_FDBKNET_LINK.dbf'
+            dir_road_cube6, f'{dir_road_cube6_out_d}_PM_PK/PM_PK_FDBKNET_LINK.dbf'
         ),
         '22-9': pp_r.merge_road_info_VDOT(
-            dir_road_cube6, f'{dir_road_cube6_out_c}/Nt_OP_FDBKNET_LINK.dbf'
+            dir_road_cube6, f'{dir_road_cube6_out_d}_Nt_OP/Nt_OP_FDBKNET_LINK.dbf'
         ),
     }  # NOTE: UTC TIME !!! 2016-10-09 was in EDT.  Local time  + 4 hours = UTC time.
     road_segment = pp_r.import_road_seg_w_inundation_info(
@@ -192,7 +215,7 @@ def calculate_all_routes():
         VDOT_speed=road_segment_VDOT,
         osm_match_vdot=dir_match_osm_n_VDOT,
     )
-    route_analysis = mo.RouteAnalysis(incidents, 'Number_nearest', mode_label='_daily_c')
+    route_analysis = mo.RouteAnalysis(incidents, 'Number_nearest', mode_label='_flood_c')
     route_analysis.run_route_analysis_arcgis(
         geodatabase_addr, fd_name, nd_name, nd_layer_name,
         rescue_sta, road_segment, if_do_normal=False,
@@ -228,6 +251,15 @@ def calculate_incidents_with_gis_travel_time(op):
             f'{geodatabase_addr}/route_results',
             list(range(list(period_dict.values())[0], list(period_dict.values())[1] + 1)),
             mode_label='_daily_c',
+        )
+
+    if op == 4:
+        # OP4: flood congestion
+        incidents = pp_i.convert_feature_class_to_df(
+            incidents,
+            f'{geodatabase_addr}/route_results',
+            list(range(list(period_dict.values())[0], list(period_dict.values())[1] + 1)),
+            mode_label='_flood_c',
         )
 
     incidents = pp_i.add_inaccessible_routes(incidents, dir_inaccessible_routes)
@@ -334,7 +366,7 @@ if __name__ == "__main__":
         'PM_Peak': [19, 22],
         'Midnight_Off-peak': [22, 9],
     }  # NOTE: UTC TIME from EDT !!!  2016-10-09 was in EDT.  Local time  + 4 hours = UTC time.
-    period_short = ['AM_PK', 'Md_OP', 'Nt_OP', 'PM_PK']
+    period_short = ['AM_PK', 'Md_OP', 'PM_PK', 'Nt_OP']
     speed_assigned = {
         'motorway': 55, 'motorway_link': 55, 'trunk': 55, 'trunk_link': 55,
         'primary': 55, 'primary_link': 55, 'secondary': 55, 'secondary_link': 55,
@@ -359,7 +391,7 @@ if __name__ == "__main__":
     dir_age_bg = './data/demographic/B01001/ACSDT5Y2016.B01001-Data_adapted.csv'
     dir_road_cube6 = './data/HR_Model_V2_04302024/trueshp/HR_Model_trueshp08022022.shp'
     dir_road_cube6_out_c = './data/HR_Model_V2_04302024/dbf_output/complete_net'
-    dir_road_cube6_out_d = './data/HR_Model_V2_04302024/dbf_output'
+    dir_road_cube6_out_d = './data/HR_Model_V2_04302024/dbf_output/disrupted_net'
     dir_match_osm_n_VDOT = './data/roads/osm_match_VDOT.geojson'
     dir_road_cube6_inundated = "./data/roads/road_segment_4_sim_vb_inundated.geojson"
     dir_road_cube7 = './data/HR_Model_V2_04302024/network_converted/network_CUBE7.SQLite'
@@ -371,7 +403,7 @@ if __name__ == "__main__":
     # save_rescue_data()
     # build_full_graph_arcgis()
 
-    # calculate_all_routes()
+    calculate_all_routes()
 
     # ######## Results 1
     # incidents = calculate_incidents_with_gis_travel_time(op=1)
@@ -501,16 +533,27 @@ if __name__ == "__main__":
     # ######
 
     ###### Results 4
+    # reg
+    incidents_op1 = calculate_incidents_with_gis_travel_time(op=1)
+    incidents_flood_1, _, _, geo_units_f_op1, _ = calculate_incidents_metrics(incidents_op1)
+    incidents_op2 = calculate_incidents_with_gis_travel_time(op=4)
+    incidents_flood_2, _, _, geo_units_f_op2, _ = calculate_incidents_metrics(incidents_op2)
 
+    reg_1 = vis.reg_spatial_lag(
+        geo_units_f_op1, "demographic_value", "diff_travel", 4,
+    )
+    reg_2 = vis.reg_spatial_lag(
+        geo_units_f_op2, "demographic_value", "diff_travel", 3,
+    )
+
+    # vis
     for l in period_short:
-        f_dir = f'{dir_road_cube6_out_d}/disrupted_net_{l}/{l}_FDBKNET_LINK.dbf'
+        f_dir = f'{dir_road_cube6_out_d}_{l}/{l}_FDBKNET_LINK.dbf'
         if os.path.exists(f_dir):
             road_segment = pp_r.merge_road_info_VDOT(
                 dir_road_cube6, f_dir
             )
             vis.map_road_speed(road_segment, 'TIME_1')
-
-
 
     # ###### Other vis
     # vis.map_error(geo_units_flood, 'diff_travel')
@@ -521,9 +564,6 @@ if __name__ == "__main__":
     #     [round(x * 0.05, 2) for x in range(2, 11)],
     #     'range',
     # )
-
-
-    ######
 
     ###### Other data processing: edit the net in CUBE
     # save_inundated_roads_4_sim()
