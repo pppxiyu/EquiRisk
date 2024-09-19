@@ -403,7 +403,7 @@ if __name__ == "__main__":
     # save_rescue_data()
     # build_full_graph_arcgis()
 
-    calculate_all_routes()
+    # calculate_all_routes()
 
     # ######## Results 1
     # incidents = calculate_incidents_with_gis_travel_time(op=1)
