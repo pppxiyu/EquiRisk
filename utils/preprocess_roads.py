@@ -329,7 +329,9 @@ class InundationToSpeed:
         return speed_series
 
 
-def import_road_seg_w_inundation_info(dir_road_inundated, speed_assigned, VDOT_speed=None, osm_match_vdot=None):
+def import_road_seg_w_inundation_info(
+        dir_road_inundated, speed_assigned, VDOT_speed=None, VDOT_speed_col=None, osm_match_vdot=None
+):
     road_segment_inundation = gpd.read_file(dir_road_inundated)
     road_segment_inundation = add_roads_max_speed(
         road_segment_inundation, speed_assigned,
@@ -346,7 +348,8 @@ def import_road_seg_w_inundation_info(dir_road_inundated, speed_assigned, VDOT_s
 
         for l in range(25, 48 + 1):
             road_segment_inundation = add_VDOT_speed(
-                road_segment_inundation, VDOT_speed, l, match_info, 25,  # label 25 is at UTC 00:00
+                road_segment_inundation, VDOT_speed, l,
+                match_info, VDOT_speed_col, 25,  # label 25 is at UTC 00:00
             )
 
     ll = ''
@@ -373,7 +376,9 @@ def import_road_seg_w_inundation_info(dir_road_inundated, speed_assigned, VDOT_s
     return road_segment_inundation
 
 
-def add_VDOT_speed(road_segment, VDOT_speed, time_label, match_info, time_label_offset=0):
+def add_VDOT_speed(
+        road_segment, VDOT_speed, time_label, match_info, VDOT_speed_col, time_label_offset=0,
+):
     time_label_updated = time_label - time_label_offset
     do = False
     for k, v in VDOT_speed.items():
@@ -389,24 +394,39 @@ def add_VDOT_speed(road_segment, VDOT_speed, time_label, match_info, time_label_
                 do = True
 
         if do is True:
+            v = calculate_speed_VDOT_output(v, VDOT_speed_col)
             road_segment.loc[:, f'maxspeed_assigned_mile_{time_label}'] = road_segment[
                 'maxspeed_assigned_mile'
             ]
             road_segment_add_match = road_segment.merge(
                 match_info[['geometry', 'vdot_id']], how='left', on='geometry'
             ).merge(
-                v[['CSPD_1', 'ID']], how='left', left_on='vdot_id', right_on='ID'
+                v[['speed', 'ID']], how='left', left_on='vdot_id', right_on='ID'
             )
             road_segment.loc[
-                ~road_segment_add_match['CSPD_1'].isna(), f'maxspeed_assigned_mile_{time_label}'
+                ~road_segment_add_match['speed'].isna(), f'maxspeed_assigned_mile_{time_label}'
             ] = road_segment_add_match.loc[
-                ~road_segment_add_match['CSPD_1'].isna(), 'CSPD_1'
+                ~road_segment_add_match['speed'].isna(), 'speed'
             ]
             road_segment[f'maxspeed_assigned_mile_{time_label}'] = road_segment[
                 f'maxspeed_assigned_mile_{time_label}'
             ].round(2)
     assert do is True, 'time_label is not matched with VDOT_speed info.'
     return road_segment
+
+
+def calculate_speed_VDOT_output(gdf, speed_col):
+    if speed_col == 'CSPD_1':
+        gdf['speed'] = gdf[speed_col]
+        return gdf
+    elif speed_col == 'TIME_1':
+        speed_column = gdf['DISTANCE_x'] / gdf[speed_col] * 60
+        speed_column[speed_column <= 1e-1] = 0
+        speed_column[speed_column >= 65] = speed_column[(speed_column < 65) & (speed_column > 1e-1)].median()
+        gdf['speed'] = speed_column
+        return gdf
+    else:
+        raise ValueError(f'speed_col {speed_col} is not supported.')
 
 
 def merge_road_info_VDOT(dir_shape, dir_info):

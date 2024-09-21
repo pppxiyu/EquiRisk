@@ -569,19 +569,57 @@ def map_origin_shift(gdf_incidents, gdf_station, mode='nearest'):
     return
 
 
-def reg_spatial_lag(df, x, y, k):
+def reg_spatial_lag(df, x, y, k, method='ML', summary=True):
     from pysal.model import spreg
     from pysal.lib import weights
 
     knn = weights.KNN.from_dataframe(df, k=k)
-    reg = spreg.GM_Lag(
-        df[[y]].values,
-        df[[x]].values,
-        name_y=y,
-        name_x=[x],
-        w=knn,
-    )
-    print(reg.summary)
+    if method == 'ML':
+        reg = spreg.ML_Lag(
+            df[[y]].values,
+            df[[x]].values,
+            name_y=y,
+            name_x=[x],
+            w=knn,
+            method='ord',
+        )
+    elif method == 'GM':
+        reg = spreg.GM_Lag(
+            df[[y]].values,
+            df[[x]].values,
+            name_y=y,
+            name_x=[x],
+            w=knn,
+        )
+    if summary:
+        print(reg.summary)
+    return reg
+
+
+def reg_pool_spatial_lag(df, x, y, k, method='ML', summary=True):
+    from pysal.model import spreg
+    from pysal.lib import weights
+
+    knn = weights.KNN.from_dataframe(df, k=k)
+    if method == 'ML':
+        reg = spreg.ML_Lag(
+            df[[y]].values,
+            df[[x]].values,
+            name_y=y,
+            name_x=[x],
+            w=knn,
+            method='ord',
+        )
+    elif method == 'GM':
+        reg = spreg.GM_Lag(
+            df[[y]].values,
+            df[[x]].values,
+            name_y=y,
+            name_x=[x],
+            w=knn,
+        )
+    if summary:
+        print(reg.summary)
     return reg
 
 
@@ -604,7 +642,7 @@ def reg_z_score_4_compared_coeff(a1, a2, std1, std2, cov):
 
 def reg_t_score_4_compared_coeff(a1, a2, std1, std2, cov):
     import math
-    return (a1 - a2) / ( math.sqrt(std1 ** 2 + std2 ** 2 - 2 * cov) )
+    return (a1 - a2) / ( math.sqrt(std1 ** 2 + std2 ** 2 - 2 * cov))
 
 
 def reg_SUR(x1, y1, x2, y2,):
@@ -624,15 +662,13 @@ def reg_SUR(x1, y1, x2, y2,):
     }
     mod = SUR(equations)
     res = mod.fit(
-        method='ols',
+        method='gls',
         full_cov=True,
         iterate=False,
         iter_limit=500,
         tol=1e-6,
         cov_type='unadjusted'
     )
-    print(res.cov)
+    # print(res.cov)
     return res.cov.loc['model1_exog_0.1', 'model2_exog_1.1']
-
-
 
