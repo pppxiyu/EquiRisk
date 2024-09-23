@@ -4,6 +4,7 @@ import utils.preprocess_incidents as pp_i
 import utils.preprocess_graph as pp_g
 import model as mo
 import utils.visualization as vis
+import utils.regression as reg
 
 import geopandas as gpd
 
@@ -408,7 +409,7 @@ def shift_test(gdf_1, gdf_2, reg_b_1, reg_b_2, reg_s_1, reg_s_2):
     gdf_1['s_dependency'] = reg_s_1.q
     gdf_2['s_dependency'] = reg_s_2.q
 
-    demo_cov = vis.reg_SUR(
+    demo_cov = reg.reg_SUR(
         gdf_1[gdf_1['id'].isin(gdf_2['id'])][
             ['demographic_value', 's_dependency']
         ].values,
@@ -418,7 +419,7 @@ def shift_test(gdf_1, gdf_2, reg_b_1, reg_b_2, reg_s_1, reg_s_2):
         ].values,
         gdf_2[gdf_2['id'].isin(gdf_1['id'])]['diff_travel'].values,
     )
-    score = vis.reg_z_score_4_compared_coeff(
+    score = reg.reg_z_score_4_compared_coeff(
         reg_b_1.betas[1][0], reg_b_2.betas[1][0], reg_b_1.std_err[1], reg_b_2.std_err[1], demo_cov,
     )
     print(f'z score for the one-side test is {score}.')
@@ -546,48 +547,21 @@ if __name__ == "__main__":
     incidents_op2 = calculate_incidents_with_gis_travel_time(op=2)
     _, _, _, geo_units_f_op2, _ = calculate_incidents_metrics(incidents_op2)
 
-    reg_1 = vis.reg_spatial_lag(
-        geo_units_f_op1, "demographic_value", "diff_travel", 5,
+    # vis.reg_spatial_lag(
+    #     geo_units_f_op1, 3, w_lag=2, method='GM', #spillover=True
+    # )
+    # vis.reg_spatial_lag(
+    #     geo_units_f_op2, 3, w_lag=2, method='GM', #spillover=True
+    # )
+    reg.reg_shift_test_bootstrapping(
+        geo_units_f_op1, geo_units_f_op2,
+        'ML',
+        weight_method='Queen',
+        # k1=3, k2=3, weight_method='KNN',
+        w_lag=1,
+        # spillover=True
     )
-    reg_2 = vis.reg_spatial_lag(
-        geo_units_f_op2, "demographic_value", "diff_travel", 3,
-    )
-    reg_gm_1 = vis.reg_spatial_lag(
-        geo_units_f_op1, "demographic_value", "diff_travel", 5, method='GM', summary=False,
-    )
-    reg_gm_2 = vis.reg_spatial_lag(
-        geo_units_f_op2, "demographic_value", "diff_travel", 3, method='GM', summary=False,
-    )
-
-    import pandas as pd
-    from pysal.model import spreg
-    from pysal.lib import weights
-    geo_units_f_op1['r'] = [0] * len(geo_units_f_op1)
-    geo_units_f_op2['r'] = [1] * len(geo_units_f_op2)
-    geo_units_f_both = pd.concat([geo_units_f_op1, geo_units_f_op2], axis=0)
-    geo_units_f_both = geo_units_f_both.reset_index(drop=True)
-    knn = weights.KNN.from_dataframe(geo_units_f_both, k=5)
-    knn_array = knn.full()[0]
-    knn_array[:len(geo_units_f_op1), len(geo_units_f_op1):] = 0
-    knn_array[len(geo_units_f_op1):, :len(geo_units_f_op1)] = 0
-    knn_updated = weights.KNN.from_array(knn_array, k=5)
-    reg = spreg.ML_Lag_Regimes(
-        y=geo_units_f_both[["diff_travel"]].values,
-        x=geo_units_f_both[["demographic_value"]].values,
-        regimes=geo_units_f_both["r"].to_list(),
-        w=knn_updated,
-        constant_regi='one',
-        regime_lag_sep=False,
-        slx_lags=4,
-        name_y='y',
-        name_x=['demographic_value'],
-        name_regimes='regimes',
-    )
-    print(reg.summary)
-
-
-    # shift test
-    shift_test(geo_units_f_op1, geo_units_f_op2, reg_1, reg_2, reg_gm_1, reg_gm_2)
+    reg.reg_shift_test_regime(geo_units_f_op1, geo_units_f_op2, 1, w_lag=1, method='ML')
 
     # micro-scale examination
     rescue_station = pp_s.import_rescue_station(dir_rescue_station_n_nearest_geo)
@@ -614,21 +588,7 @@ if __name__ == "__main__":
     incidents_op3 = calculate_incidents_with_gis_travel_time(op=3)
     _, _, _, geo_units_f_op3, _ = calculate_incidents_metrics(incidents_op3)
 
-    reg_1 = vis.reg_spatial_lag(
-        geo_units_f_op1, "demographic_value", "diff_travel", 5,
-    )
-    reg_3 = vis.reg_spatial_lag(
-        geo_units_f_op3, "demographic_value", "diff_travel", 3,
-    )
-    reg_gm_1 = vis.reg_spatial_lag(
-        geo_units_f_op1, "demographic_value", "diff_travel", 5, method='GM', summary=False,
-    )
-    reg_gm_3 = vis.reg_spatial_lag(
-        geo_units_f_op3, "demographic_value", "diff_travel", 3, method='GM', summary=False,
-    )
 
-    # shift test
-    shift_test(geo_units_f_op1, geo_units_f_op3, reg_1, reg_3, reg_gm_1, reg_gm_3)
 
     # vis
     for l in period_short:
@@ -646,21 +606,10 @@ if __name__ == "__main__":
     incidents_op4 = calculate_incidents_with_gis_travel_time(op=4)
     _, _, _, geo_units_f_op4, _ = calculate_incidents_metrics(incidents_op4)
 
-    reg_1 = vis.reg_spatial_lag(
-        geo_units_f_op1, "demographic_value", "diff_travel", 5,
-    )
-    reg_4 = vis.reg_spatial_lag(
-        geo_units_f_op4, "demographic_value", "diff_travel", 3,
-    )
-    reg_gm_1 = vis.reg_spatial_lag(
-        geo_units_f_op1, "demographic_value", "diff_travel", 4, method='GM', summary=False,
-    )
-    reg_gm_4 = vis.reg_spatial_lag(
-        geo_units_f_op4, "demographic_value", "diff_travel", 3, method='GM', summary=False,
-    )
-
-    # shift test
-    shift_test(geo_units_f_op1, geo_units_f_op4, reg_gm_1, reg_gm_4, reg_gm_1, reg_gm_4)
+    reg.reg_spatial_lag(geo_units_f_op1, 4, method='ML')
+    reg.reg_spatial_lag(geo_units_f_op4, 4, method='ML')
+    reg.reg_shift_test_bootstrapping(geo_units_f_op1, geo_units_f_op1, 4, 4, method='ML')
+    reg.reg_shift_test_regime(geo_units_f_op1, geo_units_f_op4, 4, method='ML')
 
     # vis
     for l in period_short:
@@ -679,8 +628,6 @@ if __name__ == "__main__":
         xaxis='Median household income (USD) ',
         xrange=[20000, 140000],
     )
-
-
 
 
 
