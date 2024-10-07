@@ -52,7 +52,7 @@ def import_incident(address):
     data['DispatchTime'] = (data['Dispatch Date and Time'] - data['Call Date and Time']).astype("timedelta64[s]")
     data['EnRouteTime'] = (data['En route Date and Time'] - data['Call Date and Time']).astype("timedelta64[s]")
     data['TravelTime'] = (data['On Scene Date and Time'] - data['En route Date and Time']).astype("timedelta64[s]")
-    data['ResponseTime'] = (data['En route Date and Time'] - data['Call Date and Time']).astype("timedelta64[s]")
+    data['ResponseTime'] = (data['On Scene Date and Time'] - data['Call Date and Time']).astype("timedelta64[s]")
     data['HourInDay'] = data['Call Date and Time'].dt.hour
     data['DayOfWeek'] = data['Call Date and Time'].dt.dayofweek
 

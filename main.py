@@ -5,9 +5,8 @@ import utils.preprocess_graph as pp_g
 import model as mo
 import utils.visualization as vis
 import utils.regression as reg
-
+from config_vb import *
 import geopandas as gpd
-
 import os
 
 
@@ -60,8 +59,8 @@ def save_inundated_roads_4_sim():
 
 def save_rescue_data():
     # process rescue station data and save it
-    road_intersection = gpd.read_file(f"./data/roads/road_intersection_vb.geojson")
-    road_segment = gpd.read_file(f"./data/roads/road_segment_vb.geojson")
+    road_intersection = gpd.read_file(f"data/bch/roads/road_intersection_vb.geojson")
+    road_segment = gpd.read_file(f"data/bch/roads/road_segment_vb.geojson")
     rescue_station = pp_s.import_rescue_station('./data/rescue_team_location/rescue_stations.txt')
     rescue_station['nearest_segment'] = rescue_station.to_crs(crs_prj).geometry.apply(
         lambda x: pp_s.add_nearest_segment(x, road_segment.to_crs(crs_prj))
@@ -427,55 +426,6 @@ def shift_test(gdf_1, gdf_2, reg_b_1, reg_b_2, reg_s_1, reg_s_2):
 
 
 if __name__ == "__main__":
-    crs_prj = 'epsg:32633'
-
-    geodatabase_addr = './gis_analysis/arcgis_emergency_service_routing/arcgis_emergency_service_routing.gdb'
-    fd_name = 'road_network'
-    nd_name = 'road_nd'
-    nd_layer_name = 'road_nd_layer'
-    turn_name = 'turn_restriction'
-
-    period_dict = {
-        '2016-10-09 00:00:00': 25,
-        '2016-10-09 23:00:00': 48,
-    }  # NOTE: UTC TIME !!!
-    period_split = {
-        'AM_Peak': [9, 13],
-        'Midday_Off-peak': [13, 19],
-        'PM_Peak': [19, 22],
-        'Midnight_Off-peak': [22, 9],
-    }  # NOTE: UTC TIME from EDT !!!  2016-10-09 was in EDT.  Local time  + 4 hours = UTC time.
-    period_short = ['AM_PK', 'Md_OP', 'PM_PK', 'Nt_OP']
-    speed_assigned = {
-        'motorway': 55, 'motorway_link': 55, 'trunk': 55, 'trunk_link': 55,
-        'primary': 55, 'primary_link': 55, 'secondary': 55, 'secondary_link': 55,
-        'tertiary': 25, 'tertiary_link': 25, 'unclassified': 25, 'residential': 25, 'service': 25,
-    }
-
-    dir_rescue_station_n_nearest_geo = './data/rescue_team_location/rescue_stations_n_nearest_geo.csv'
-    dir_incidents = 'data/incidents/geocoded/20160101-20161015.csv'
-    dir_incidents_routing_nearest = './data/incidents/incidents_w_routing_nearest/incidents_w_routing_nearest.csv'
-    dir_turn = './data/roads/turn_restriction_vb_overpass.geojson'
-    dir_road = "./data/roads/road_segment_vb.geojson"
-    dir_road_inundated = "./data/roads/road_segment_vb_inundated.geojson"
-    dir_inaccessible_routes = "./data/incidents/inaccessible_route"
-    dir_tract_boundaries = './data/boundaries/cb_2016_51_tract_500k/cb_2016_51_tract_500k.shp'
-    dir_bg_boundaries = './data/boundaries/tl_2017_51_bg/tl_2017_51_bg.shp'
-    dir_income_tract = './data/demographic/S1901/ACSST5Y2016.S1901-Data.csv'
-    dir_income_bg = './data/demographic/B19013/ACSDT5Y2016.B19013-Data.csv'
-    dir_edu = './data/demographic/S1501/ACSST5Y2016.S1501-Data.csv'
-    dir_edu_bg = './data/demographic/B15003/ACSDT5Y2016.B15003-Data_adapted.csv'
-    dir_population = './data/demographic/DP05/ACSDP5Y2016.DP05-Data.csv'
-    dir_minority_bg = './data/demographic/B02001/ACSDT5Y2016.B02001-Data_adapted.csv'
-    dir_age_bg = './data/demographic/B01001/ACSDT5Y2016.B01001-Data_adapted.csv'
-    dir_road_cube6 = './data/HR_Model_V2_04302024/trueshp/HR_Model_trueshp08022022.shp'
-    dir_road_cube6_out_c = './data/HR_Model_V2_04302024/dbf_output/complete_net'
-    dir_road_cube6_out_d = './data/HR_Model_V2_04302024/dbf_output/disrupted_net'
-    dir_match_osm_n_VDOT = './data/roads/osm_match_VDOT.geojson'
-    dir_road_cube6_inundated = "./data/roads/road_segment_4_sim_vb_inundated.geojson"
-    dir_road_cube7 = './data/HR_Model_V2_04302024/network_converted/network_CUBE7.SQLite'
-    dir_road_cube7_inundated = './data/HR_Model_V2_04302024/network_converted_inundated'
-    ########
 
     ########
     # save_inundated_roads()
@@ -547,17 +497,17 @@ if __name__ == "__main__":
     incidents_op2 = calculate_incidents_with_gis_travel_time(op=2)
     _, _, _, geo_units_f_op2, _ = calculate_incidents_metrics(incidents_op2)
 
-    # vis.reg_spatial_lag(
-    #     geo_units_f_op1, 3, w_lag=2, method='GM', #spillover=True
-    # )
-    # vis.reg_spatial_lag(
-    #     geo_units_f_op2, 3, w_lag=2, method='GM', #spillover=True
-    # )
+    reg.reg_spatial_lag(
+        geo_units_f_op1, w_lag=1, method='ML', weight_method='Queen', #spillover=True
+    )
+    reg.reg_spatial_lag(
+        geo_units_f_op2, w_lag=1, method='ML', weight_method='Queen', #spillover=True
+    )
     reg.reg_shift_test_bootstrapping(
         geo_units_f_op1, geo_units_f_op2,
         'ML',
         weight_method='Queen',
-        # k1=3, k2=3, weight_method='KNN',
+        # k1=4, k2=4, weight_method='KNN',
         w_lag=1,
         # spillover=True
     )
@@ -629,7 +579,20 @@ if __name__ == "__main__":
         xrange=[20000, 140000],
     )
 
+    ###### Results 5: origin shift + flood congestion
+    incidents_op1 = calculate_incidents_with_gis_travel_time(op=1)
+    _, _, _, geo_units_f_op1, _ = calculate_incidents_metrics(incidents_op1)
+    incidents_op5 = calculate_incidents_with_gis_travel_time(op=5)
+    _, _, _, geo_units_f_op5, _ = calculate_incidents_metrics(incidents_op5)
 
+    reg.reg_shift_test_bootstrapping(
+        geo_units_f_op1, geo_units_f_op5,
+        'ML',
+        weight_method='Queen',
+        # k1=3, k2=3, weight_method='KNN',
+        w_lag=1,
+        # spillover=True
+    )
 
     # ###### Other vis
     # vis.map_error(geo_units_flood, 'diff_travel')
