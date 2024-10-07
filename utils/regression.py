@@ -4,11 +4,12 @@ from pysal.model import spreg
 from pysal.lib import weights
 import math
 
+
 def reg_spatial_lag(
-        df, k, method,
+        df, method, weight_method, k=None,
         x='demographic_value', y='diff_travel', w_lag=1, summary=True, spillover=False,
 ):
-    knn = weights.KNN.from_dataframe(df, k=k)
+    m = reg_build_matrix(df, weight_method, k=k)
     if method == 'ML':
         assert w_lag == 1, 'ML_lag does not support w_lags != 1'
         reg = spreg.ML_Lag(
@@ -16,7 +17,7 @@ def reg_spatial_lag(
             df[[x]].values,
             name_y=y,
             name_x=[x],
-            w=knn,
+            w=m,
             method='ord',
         )
     elif method == 'GM':
@@ -25,7 +26,7 @@ def reg_spatial_lag(
             df[[x]].values,
             name_y=y,
             name_x=[x],
-            w=knn,
+            w=m,
             w_lags=w_lag,
         )
     elif method == 'GM_Combo_Het':
@@ -34,7 +35,7 @@ def reg_spatial_lag(
             df[[x]].values,
             name_y=y,
             name_x=[x],
-            w=knn,
+            w=m,
             w_lags=w_lag,
         )
     elif method == 'GM_Combo_Hom':
@@ -43,7 +44,7 @@ def reg_spatial_lag(
             df[[x]].values,
             name_y=y,
             name_x=[x],
-            w=knn,
+            w=m,
             w_lags=w_lag,
         )
     if summary:
@@ -204,7 +205,7 @@ def reg_shift_test_bootstrapping(
                     name_y=y_col,
                     name_x=[x_col],
                     w=knn_2,
-            )
+                )
         except Exception as e:
             print(e)
             continue
