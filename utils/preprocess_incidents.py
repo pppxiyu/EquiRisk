@@ -254,9 +254,14 @@ def merge_incidents_demographic_bg(incidents, demographic):
     return incidents
 
 
-def merge_demographic_geo_bg(demographic, dir_bg, target_county_num='810'):
+def get_geo_bg(dir_bg, target_county_num='810'):
     geo = gpd.read_file(dir_bg)
     geo = geo[geo['COUNTYFP'] == target_county_num]
+    return geo
+
+
+def merge_demographic_geo_bg(demographic, dir_bg):
+    geo = get_geo_bg(dir_bg)
     geo['id'] = geo['TRACTCE'] + geo['BLKGRPCE']
 
     demographic['tract_name_adapt'] = '0' + (demographic['tract_name'].astype(float) * 100).astype(int).astype(str)
@@ -327,4 +332,43 @@ def delete_outlier_mahalanobis(df, col):
     df = df[df_c['Mahalanobis'] <= threshold]
 
     return df
+
+
+def add_econ_class(gdf, bar, income_col, save_col, dir_save=None):
+    gdf['econ_class'] = gdf[income_col].apply(lambda x: 'middle_higher' if x > bar else 'lower')
+    if dir_save is not None:
+        gdf[save_col + ['econ_class', 'geometry']].to_file(dir_save, driver="ESRI Shapefile")
+    return gdf
+
+
+def save_ict_to_shp(gdf_i, dir_save, time_range_dict=None, to_arcgis=False, gdb_path=None,):
+
+    if time_range_dict is not None:
+        begin, end = list(time_range_dict.keys())
+        gdf = gdf[(gdf['Call Date and Time'] >= begin) & (gdf['Call Date and Time'] <= end)]
+
+    for col in gdf.select_dtypes(['datetime64[ns, UTC]']).columns:
+        gdf[col] = gdf[col].astype(str)
+    for col in gdf.select_dtypes(['datetime64[ns]']).columns:
+        gdf[col] = gdf[col].astype(str)
+
+    for col in gdf.select_dtypes(['timedelta64[ns]']).columns:
+        gdf[col] = gdf[col].dt.total_seconds()
+
+    geometry_cols = [col for col in gdf.columns if isinstance(gdf[col], gpd.GeoSeries)]
+    geometry_cols_remove = [i for i in geometry_cols if i != 'geometry']
+    gdf = gdf.drop(columns=geometry_cols_remove)
+
+    gdf.to_file(f'{dir_save}/flood_ict_with_travel_time_estimate.shp')
+    gdf.to_file(f'{dir_save}/flood_ict_with_travel_time_estimate.geojson')
+
+    if to_arcgis is True:
+        assert gdb_path is not None
+        import arcpy
+        arcpy.env.workspace = gdb_path
+        arcpy.FeatureClassToGeodatabase_conversion(
+            f'{dir_save}/flood_ict_with_travel_time_estimate.shp', gdb_path
+        )
+
+    return
 

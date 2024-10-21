@@ -1,5 +1,7 @@
 from config_vb import *
 
+city_name = [(33.00, 32.67, -79.79, -80.20), 'chs']
+
 geodatabase_addr = './gis_analysis/emerg_routing_CHS/emerg_routing_CHS.gdb'
 
 period_dict = {
@@ -12,10 +14,13 @@ speed_assigned = {
     'tertiary': 25, 'tertiary_link': 25, 'unclassified': 25, 'residential': 25, 'service': 25,
 }
 
-dir_rescue_station_n_nearest_geo = 'data/VB/rescue_team_location/rescue_stations_n_nearest_geo.csv'
-dir_turn = 'data/VB/roads/turn_restriction_vb_overpass.geojson'
-dir_road = "data/VB/roads/road_segment_vb.geojson"
-dir_road_inundated = "..."
+dir_rescue_station = 'data/CHS/rescue_team_location/rescue_stations.txt'
+dir_rescue_station_n_nearest_geo = 'data/CHS/rescue_team_location/rescue_stations_n_nearest_geo.csv'
+dir_turn = 'data/CHS/roads/turn_restriction_CHS_overpass.geojson'
+dir_road_folder = './data/CHS/roads'
+dir_road = './data/CHS/roads/road_segment_chs.geojson'
+
+dir_road_inundated = 'data/CHS/roads/road_segment_CHS.geojson'
 dir_inaccessible_routes = "..."
 
 dir_incidents = '...'

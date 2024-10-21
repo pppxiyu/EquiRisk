@@ -1,5 +1,6 @@
 import plotly.express as px
 import plotly.graph_objects as go
+import plotly.io as pio
 
 
 def s_mapbox_scatter_px(gdf, color_col):
@@ -96,7 +97,10 @@ def layout(fig):
     return fig
 
 
-def scatter_demo_vs_error_w_period(df, col_demo, col_error, col_color, col_time, xaxis, yaxis, reg_line=None):
+def scatter_demo_vs_error_w_period(
+        df, col_demo, col_error, col_color, col_time, xaxis, yaxis,
+        reg_line=None,
+):
     df[col_color] = df[col_color].astype(float)
     color_map = {row[col_color]: row[col_time] for index, row in df.iterrows()}
     fig = px.scatter(
@@ -165,9 +169,12 @@ def scatter_demo_vs_error_w_period(df, col_demo, col_error, col_color, col_time,
 
 
 def scatter_demo_vs_error(
-        df, col_demo, col_error, xaxis, yaxis, xrange,
-        reg_line=None, color='#3F6F8C', size=17.5, height=None,
+        df, xaxis, yaxis='Travel time<br>estimation error (s)',
+        reg_line=None, color='#3F6F8C', size=17.5,
+        col_demo='demographic_value', col_error='diff_travel',
+        save_label=None,
 ):
+    xrange = extend_and_round_range([df[col_demo].min(), df[col_demo].max()], extension_percent=0.05)
     fig = px.scatter(
         df, x=col_demo, y=col_error,
     )
@@ -225,9 +232,24 @@ def scatter_demo_vs_error(
         )
     )
     fig = layout(fig)
-    if height is not None:
-        fig.update_layout(height=height)
+    fig.update_layout(width=570, height=475)
     fig.show(renderer="browser")
+    if save_label is not None:
+        if reg_line is not None:
+            p_label = 'f'
+        else:
+            p_label = 'n'
+        fig.write_image(
+            f"./manuscripts/figs/scatter_demo_vs_error_{save_label}_{p_label}.png", engine="orca",
+            width=570, height=475, scale=3.125
+        )
+
+
+def get_geo_bg(dir_bg, target_county_num='810'):
+    import geopandas as gpd
+    geo = gpd.read_file(dir_bg)
+    geo = geo[geo['COUNTYFP'] == target_county_num]
+    return geo
 
 
 def map_error(gdf, color_col):
@@ -259,7 +281,79 @@ def map_error(gdf, color_col):
     fig.show(renderer="browser")
 
 
-def map_demo(gdf, color_col, demo_name):
+def map_geo_only(
+        demo, dir_geo, color_col,
+        demo_name, save_label,
+        target_county_num='810', exclude_idx=None,
+        color_scale='Blues_r', color_range=None,
+        geo_range=None, legend_top=0.97,
+):
+    import json
+    polygons = get_geo_bg(dir_geo, target_county_num=target_county_num)
+    if exclude_idx is not None:
+        polygons = polygons.drop(exclude_idx)
+    if geo_range is None:
+        minx, miny, maxx, maxy = polygons.total_bounds
+    else:
+        minx, miny, maxx, maxy = geo_range[0], geo_range[1], geo_range[2], geo_range[3],
+    polygons_update = polygons[['geometry']].sjoin(demo, how='left', predicate='within')
+    assert polygons_update['geometry'].duplicated().any() == False
+    polygons_missing = polygons_update[polygons_update[color_col].isna()].copy()
+
+    fig = px.choropleth(
+        polygons_update,
+        geojson=polygons_update.geometry, locations=polygons_update.index,
+        color=color_col, color_continuous_scale=color_scale, range_color=color_range,
+        projection="mercator",
+    )
+    fig.add_trace(
+        go.Choropleth(
+            geojson=json.loads(polygons_missing.geometry.to_json()),
+            locations=polygons_missing.index,
+            z=[1] * len(polygons_missing),
+            colorscale=[[0, "#DCDCDC"], [1, "#DCDCDC"]],
+            showscale=False
+        )
+    )
+    fig.update_traces(
+        marker_line_color="#383838",
+        marker_line_width=0.75,
+    )
+    fig.update_geos(
+        center=dict(lat=(miny + maxy) / 2, lon=(minx + maxx) / 2),
+        lataxis=dict(range=[miny - 0.01, maxy + 0.01]), lonaxis=dict(range=[minx - 0.01, maxx + 0.01]),
+        visible=False
+    )
+    fig.update_coloraxes(
+        colorbar=dict(
+            len=0.5,
+            title=dict(
+                text=demo_name,
+                font=dict(size=18)
+            ),
+            outlinecolor='black',
+            outlinewidth=0.5,
+            tickfont=dict(size=14),
+            x=0.9, xanchor="left",
+            y=legend_top, yanchor="top"
+        ),
+    )
+    fig.update_layout(
+        font=dict(family="Arial", color="Black"),
+        autosize=False,
+        width=600,
+        height=600,
+        margin=dict(l=0, r=0, t=0, b=0)
+    )
+    fig.show(renderer="browser")
+    fig.write_image(
+        f"./manuscripts/figs/map_demographic_{save_label}.png", engine="orca",
+        width=600, height=600, scale=3.125
+    )
+
+
+
+def map_demographic(gdf, color_col, demo_name):
     import json
     px.set_mapbox_access_token(open("./utils/mapboxToken.txt").read())
     fig = px.choropleth_mapbox(
@@ -566,5 +660,204 @@ def map_origin_shift(gdf_incidents, gdf_station, mode='nearest'):
     fig.show(renderer="browser")
 
     return
+
+
+def scatter_dist_icd_travel_time(icd, period, mode='dist'):
+    import warnings
+    import pandas as pd
+    import numpy as np
+    flood_begins = list(period.keys())[0]
+    flood_ends = list(period.keys())[1]
+
+    # clean
+    icd['TravelTime'] = icd['TravelTime'].dt.total_seconds()
+    icd['TravelTime'] = icd['TravelTime'].replace(0, np.nan)
+    icd_mean = icd['TravelTime'].mean()
+    icd_std = icd['TravelTime'].std()
+    icd['TravelTime'] = icd['TravelTime'].where(
+        (icd['TravelTime'] >= icd_mean - icd_std * 3) & (icd['TravelTime'] <= icd_mean + icd_std * 3), np.nan
+    )
+
+    # conditioned on incident locations
+    icd_flood = icd[(icd['Call Date and Time'] >= flood_begins) & (icd['Call Date and Time'] <= flood_ends)]
+    icd_normal = icd[(icd['Call Date and Time'] < flood_begins) | (icd['Call Date and Time'] > flood_ends)]
+    icd_flood = icd_flood.to_crs('epsg:26918')
+    icd_normal = icd_normal.to_crs('epsg:26918')
+    icd_normal_ave = icd_normal[['TravelTime', 'IncidentAddress', 'geometry']].dissolve(
+        'IncidentAddress', as_index=False, aggfunc='mean',
+    )
+    icd_flood = icd_flood.sjoin_nearest(icd_normal_ave, how='left', distance_col='sjoin_dist')
+    icd_normal = icd_normal.sjoin_nearest(icd_normal_ave, how='left', distance_col='sjoin_dist')
+    if icd_flood['sjoin_dist'].max() > 0:
+        warnings.warn(f"Max dist to the nearest incident loc is {icd_flood['sjoin_dist'].max()}")
+    icd_flood['travel_icrs_ratio'] = icd_flood['TravelTime_left'] / icd_flood['TravelTime_right']
+    icd_normal['travel_icrs_ratio'] = icd_normal['TravelTime_left'] / icd_normal['TravelTime_right']
+
+    # vis
+    if mode == 'dist':
+        import plotly.figure_factory as ff
+        icd_flood_d = icd_flood[~icd_flood['travel_icrs_ratio'].isna()]
+        icd_normal_d = icd_normal[~icd_normal['travel_icrs_ratio'].isna()].sample(1000)
+        icd_normal_d = icd_normal_d[icd_normal_d['travel_icrs_ratio'] <= 10]
+        fig = ff.create_distplot(
+            [icd_flood_d['travel_icrs_ratio'].to_list(), icd_normal_d['travel_icrs_ratio'].to_list()],
+            ['Flooding', 'Non-flooding'],
+            bin_size=.5, show_rug=False, colors=['#235689', '#42BCB2']
+        )
+        fig.update_layout(
+            xaxis=dict(
+                title='Travel time / Baseline time',
+                showline=True,
+                linewidth=2,
+                linecolor='black',
+                showgrid=False,
+                ticks='outside',
+                tickformat=',',
+                zeroline=False,
+                nticks=10,
+                range=[0, 10],
+                tickvals=[0, 1, 2, 4, 6, 8, 10],
+            ),
+            yaxis=dict(
+                title='Probability',
+                showline=True,
+                linewidth=2,
+                linecolor='black',
+                showgrid=False,
+                ticks='outside',
+                tickformat=',',
+                zeroline=False,
+                range=[0, 1],
+            ),
+            font=dict(family="Arial", size=18, color="black"),
+            width=450, height=450,
+            legend=dict(x=0.75, y=0.95, xanchor="center", yanchor="top",),
+            plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+            margin=dict(l=50, r=50, t=50, b=50)
+        )
+        fig.add_shape(
+            type='line',
+            x0=1, x1=1, y0=0, y1=1,
+            line=dict(color='black', width=1, dash='dash')
+        )
+        fig.show(renderer="browser")
+        fig.write_image(
+            "./manuscripts/figs/dist_travel_increase.png", engine="orca",
+            width=450, height=450, scale=3.125
+        )
+    elif mode == 'scatter':
+        icd_flood['label'] = ['Flooding'] * len(icd_flood)
+        icd_normal['label'] = ['Non-flooding'] * len(icd_normal)
+        icd_flood_s = icd_flood[~icd_flood['travel_icrs_ratio'].isna()]
+        icd_normal_s = icd_normal[~icd_normal['travel_icrs_ratio'].isna()].sample(100)
+        icd_updated = pd.concat([icd_normal_s, icd_flood_s,])
+        fig = px.scatter(
+            icd_updated, x="TravelTime_right", y="travel_icrs_ratio", color="label", symbol="label",
+            color_discrete_map={'Non-flooding': '#42BCB2', 'Flooding': '#235689', }
+        )
+        fig.update_layout(
+            xaxis=dict(
+                title='Baseline time',
+                showline=True,
+                linewidth=2,
+                linecolor='black',
+                showgrid=False,
+                ticks='outside',
+                tickformat=',',
+                zeroline=False,
+                nticks=10,
+                range=[0, 900],
+            ),
+            yaxis=dict(
+                title='Travel time / Baseline time',
+                showline=True,
+                linewidth=2,
+                linecolor='black',
+                showgrid=False,
+                ticks='outside',
+                tickformat=',',
+                zeroline=False,
+                range=[0, 10],
+                tickvals=[0, 1, 2, 4, 6, 8, 10]
+            ),
+            font=dict(family="Arial", size=18, color="black"),
+            width=450, height=450,
+            legend=dict(x=0.8, y=0.95, xanchor="center", yanchor="top", title_text=None),
+            plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+            margin=dict(l=50, r=50, t=50, b=50)
+        )
+        fig.add_shape(
+            type='line',
+            x0=0, x1=900, y0=1, y1=1,
+            line=dict(color='black', width=1, dash='dash')
+        )
+        fig.show(renderer="browser")
+        fig.write_image(
+            "./manuscripts/figs/scatter_travel_increase.png", engine="orca",
+            width=450, height=450, scale=3.125
+        )
+    return
+
+
+def extend_and_round_range(original_range, extension_percent=0.1,):
+    import math
+    min_val, max_val = original_range
+    current_length = max_val - min_val
+
+    extension = current_length * extension_percent
+    new_min = min_val - extension
+    new_max = max_val + extension
+
+    if min_val == 0:
+        scale = 10 ** math.floor(math.log10(max_val))
+    else:
+        scale = 10 ** math.floor(math.log10(min_val))
+
+    new_min_rounded = math.floor(new_min / scale) * scale
+    new_max_rounded = math.ceil(new_max / scale) * scale
+
+    return [new_min_rounded, new_max_rounded]
+
+
+def bar_wellness(lower, higher):
+    lower_r = round(lower, 3)
+    higher_r = round(higher, 3)
+    x = ['Lower-income<br>class', 'Middle- and<br>upper-<br>income class']
+    y = [lower_r, higher_r]
+    fig = go.Figure(data=[go.Bar(
+        x=x, y=y,
+        text=y,
+        textposition='auto',
+        textfont=dict(size=16, color='white'),
+        marker_color=['#62B197', '#E18E6D'],
+    )])
+    fig = layout(fig)
+    fig.update_layout(
+        xaxis=dict(
+            showline=True,
+            linewidth=2, linecolor='black', showgrid=False,
+            ticks='outside', tickformat=',',
+            zeroline=False,
+            nticks=10,
+        ),
+        yaxis=dict(
+            title='Risk assessment bias',
+            showline=True,
+            linewidth=2, linecolor='black', showgrid=False,
+            ticks='outside', tickformat=',',
+            range=[-0.8, 0],
+            zeroline=False,
+        ),
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        width=400, height=400,
+        font=dict(size=16)
+    )
+    fig.show(renderer="browser")
+    fig.write_image(
+        "./manuscripts/figs/bar_bias.png", engine="orca",
+        width=400, height=400, scale=3.125
+    )
+
 
 
