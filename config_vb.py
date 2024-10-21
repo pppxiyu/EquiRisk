@@ -1,10 +1,13 @@
 crs_prj = 'epsg:32633'
 
-geodatabase_addr = './gis_analysis/arcgis_emergency_service_routing/arcgis_emergency_service_routing.gdb'
+city_name = ['Virginia Beach, VA, USA', 'vb']
+
+geodatabase_addr = './gis_analysis/emerg_routing_VB/arcgis_emergency_service_routing.gdb'
 fd_name = 'road_network'
 nd_name = 'road_nd'
 nd_layer_name = 'road_nd_layer'
 turn_name = 'turn_restriction'
+service_area_threshold = 324
 
 period_dict = {
     '2016-10-09 00:00:00': 25,
@@ -23,10 +26,14 @@ speed_assigned = {
     'tertiary': 25, 'tertiary_link': 25, 'unclassified': 25, 'residential': 25, 'service': 25,
 }
 
+middle_class_bar = 44246
+
+dir_rescue_station = 'data/VB/rescue_team_location/rescue_stations.txt'
 dir_rescue_station_n_nearest_geo = 'data/VB/rescue_team_location/rescue_stations_n_nearest_geo.csv'
 dir_incidents = 'data/VB/incidents/geocoded/20160101-20161015.csv'
 dir_incidents_routing_nearest = 'data/VB/incidents/incidents_w_routing_nearest/incidents_w_routing_nearest.csv'
 dir_turn = 'data/VB/roads/turn_restriction_vb_overpass.geojson'
+dir_road_folder = './data/VB/roads'
 dir_road = "data/VB/roads/road_segment_vb.geojson"
 dir_road_inundated = "data/VB/roads/road_segment_vb_inundated.geojson"
 dir_inaccessible_routes = "data/VB/incidents/inaccessible_route"
@@ -46,3 +53,4 @@ dir_match_osm_n_VDOT = 'data/VB/roads/osm_match_VDOT.geojson'
 dir_road_cube6_inundated = "data/VB/roads/road_segment_4_sim_vb_inundated.geojson"
 dir_road_cube7 = 'data/VB/HR_Model_V2_04302024/network_converted/network_CUBE7.SQLite'
 dir_road_cube7_inundated = 'data/VB/HR_Model_V2_04302024/network_converted_inundated'
+dir_save_travel_time_est = './data/VB/incidents/flood_ict_with_travel_time_estimate'

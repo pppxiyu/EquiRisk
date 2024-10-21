@@ -1,6 +1,6 @@
 from config_vb import *
 
-geodatabase_addr = './gis_analysis/arcgis_emergency_service_routing/arcgis_emergency_service_routing.gdb'
+geodatabase_addr = './gis_analysis/emerg_routing_SAV/arcgis_emergency_service_routing/arcgis_emergency_service_routing.gdb'
 
 period_dict = {
     '2016-10-09 00:00:00': 25,

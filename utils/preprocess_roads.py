@@ -9,10 +9,18 @@ def pull_roads_osm(city, city_abbr, folder, filter):
     import osmnx as ox
     import networkx as nx
 
-    graph = ox.graph_from_place(
-        city, custom_filter=f'["highway"~{filter}]',
-        simplify=False, retain_all=True, truncate_by_edge=True
-    )
+    if isinstance(city, str):
+        graph = ox.graph_from_place(
+            city, custom_filter=f'["highway"~{filter}]',
+            simplify=False, retain_all=True, truncate_by_edge=True
+        )
+    elif isinstance(city, tuple):
+        graph = ox.graph_from_bbox(
+            bbox=city, custom_filter=f'["highway"~{filter}]',
+            simplify=False, retain_all=True, truncate_by_edge=True
+        )
+    else:
+        raise ValueError('city_abbr must be str or tuple')
     graph = ox.simplify_graph(graph, edge_attrs_differ=['osmid', 'oneway'])
 
     gdf_nodes = ox.graph_to_gdfs(graph, edges=True)[0]
