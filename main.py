@@ -492,43 +492,43 @@ if __name__ == "__main__":
 
     ##### Results 2
     # # reg
-    # incidents_op1 = calculate_incidents_with_gis_travel_time(op=1)
-    # _, _, _, geo_units_f_op1, _ = calculate_incidents_metrics(incidents_op1)
-    # incidents_op2 = calculate_incidents_with_gis_travel_time(op=2)
-    # _, _, _, geo_units_f_op2, _ = calculate_incidents_metrics(incidents_op2)
-    #
-    # reg.reg_spatial_lag(
-    #     geo_units_f_op1, w_lag=1, method='ML', weight_method='Queen', #spillover=True
+    # _, _, _, geo_units_f_op2, _ = calculate_incidents_metrics(
+    #     calculate_incidents_with_gis_travel_time(op=2), demo_label='income',
     # )
-    # reg.reg_spatial_lag(
-    #     geo_units_f_op2, w_lag=1, method='ML', weight_method='Queen', #spillover=True
+    # reg_model = reg.reg_spatial_lag(geo_units_f_op2, w_lag=1, method='ML', weight_method='Queen',)
+
+    # # shift test
+    # _, _, _, geo_units_f_op1, _ = calculate_incidents_metrics(
+    #     calculate_incidents_with_gis_travel_time(op=1), demo_label='income',
+    # )
+    # _, _, _, geo_units_f_op2, _ = calculate_incidents_metrics(
+    #     calculate_incidents_with_gis_travel_time(op=2), demo_label='income',
     # )
     # reg.reg_shift_test_bootstrapping(
-    #     geo_units_f_op1, geo_units_f_op2,
-    #     'ML',
-    #     weight_method='Queen',
-    #     # k1=4, k2=4, weight_method='KNN',
-    #     w_lag=1,
-    #     # spillover=True
+    #     geo_units_f_op1, geo_units_f_op2,'ML', weight_method='Queen', w_lag=1,
+    #     n_iter=5000,
     # )
-    # reg.reg_shift_test_regime(geo_units_f_op1, geo_units_f_op2, 1, w_lag=1, method='ML')
-    #
-    # # micro-scale examination
-    # rescue_station = pp_s.import_rescue_station(dir_rescue_station_n_nearest_geo)
-    # incidents = pp_i.import_incidents_add_info(
-    #     dir_incidents, rescue_station, period_dict, routing_nearest=dir_incidents_routing_nearest,
-    # )
-    # incidents_shift = incidents[incidents['Number_nearest'] != incidents['Number_actual']]
-    # incidents_f = incidents_shift[~incidents_shift['period_actual'].isna()]
-    # incidents_n = incidents_shift[incidents_shift['period_actual'].isna()]
-    #
-    # incidents_f.loc[:, ['if_nearest_occupied', 'if_nearest_closed']] = incidents_f.apply(
-    #     lambda x: pp_s.check_occupation(
-    #         x, station_col='Number_nearest', time_col='Call Date and Time', incidents=incidents,
-    #     ),
-    #     axis=1, result_type='expand'
-    # ).values
-    # vis.map_origin_shift(incidents_f, rescue_station, mode='actual')
+
+    # micro-scale examination
+    _, incidents_n, _, _, _ = calculate_incidents_metrics(
+        calculate_incidents_with_gis_travel_time(op=1), demo_label='income',
+    )
+    rescue_station = pp_s.import_rescue_station(dir_rescue_station_n_nearest_geo)
+    incidents = pp_i.import_incidents_add_info(
+        dir_incidents, rescue_station, period_dict, routing_nearest=dir_incidents_routing_nearest,
+    )
+    incidents_shift = incidents[incidents['Number_nearest'] != incidents['Number_actual']]
+    incidents_shift_f = incidents_shift[~incidents_shift['period_actual'].isna()]
+    incidents_shift_f.loc[:, ['if_nearest_occupied', 'if_nearest_closed']] = incidents_shift_f.apply(
+        lambda x: pp_s.check_occupation(
+            x, station_col='Number_nearest', time_col='Call Date and Time', incidents=incidents,
+        ),
+        axis=1, result_type='expand'
+    ).values
+    # vis.scatter_income_service_volumn(incidents_n, incidents_shift_f)
+    # vis.map_origin_shift(incidents_shift_f, rescue_station, mode='actual')
+    vis.map_origin_shift(incidents_shift_f, rescue_station, mode='nearest')
+
     ######
 
     # ###### Results 3

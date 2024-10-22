@@ -565,8 +565,51 @@ def map_origin_shift(gdf_incidents, gdf_station, mode='nearest'):
     matches_x, matches_y = get_matches(gdf_i_2)
 
     fig = go.Figure()
-    fig.add_trace(  # station big circle
-        go.Scattermapbox(
+    if mode == 'actual':
+        fig.add_trace(  # actual match
+            go.Scattermapbox(
+                lat=matches_y.flatten(),
+                lon=matches_x.flatten(),
+                mode='lines',
+                marker=go.scattermapbox.Marker(
+                    size=10,
+                    color='grey',
+                ),
+                showlegend=True,
+                name='Recorded dispatches'
+            )
+        )
+    elif mode == 'nearest':
+        matches_x_c, matches_y_c = get_matches(gdf_i_closed)
+        fig.add_trace(
+            go.Scattermapbox(
+                lat=matches_y_c.flatten(),
+                lon=matches_x_c.flatten(),
+                mode='lines',
+                marker=go.scattermapbox.Marker(
+                    size=10,
+                    color='#F2B680',
+                ),
+                showlegend=True,
+                name='Nearest dispatches but station closed'
+            )
+        )
+        matches_x_o, matches_y_o = get_matches(gdf_i_occupied)
+        fig.add_trace(
+            go.Scattermapbox(
+                lat=matches_y_o.flatten(),
+                lon=matches_x_o.flatten(),
+                mode='lines',
+                marker=go.scattermapbox.Marker(
+                    size=10,
+                    color='#AA4A44',
+                ),
+                showlegend=True,
+                name='Nearest dispatches but station occupied'
+            )
+        )
+    fig.add_trace(
+        go.Scattermapbox(  # station big circle
             lat=gdf_station['lat'],
             lon=gdf_station['lon'],
             mode='markers',
@@ -575,7 +618,7 @@ def map_origin_shift(gdf_incidents, gdf_station, mode='nearest'):
                 color='#191970',
             ),
             showlegend=False,
-        )
+        ),
     )
     fig.add_trace(  # station small circle
         go.Scattermapbox(
@@ -586,6 +629,20 @@ def map_origin_shift(gdf_incidents, gdf_station, mode='nearest'):
                 size=10,
                 color='#6F8FAF',
             ),
+            showlegend=True,
+            name='Emergency service stations',
+        )
+    )
+    fig.add_trace(  # incidents bg
+        go.Scattermapbox(
+            lat=gdf_incidents.geometry.y,
+            lon=gdf_incidents.geometry.x,
+            mode='markers',
+            marker=go.scattermapbox.Marker(
+                size=12,
+                color='#191970',
+            ),
+            showlegend=False
         )
     )
     fig.add_trace(  # incidents
@@ -594,70 +651,60 @@ def map_origin_shift(gdf_incidents, gdf_station, mode='nearest'):
             lon=gdf_incidents.geometry.x,
             mode='markers',
             marker=go.scattermapbox.Marker(
-                size=10,
-                color='#0F52BA',
+                size=8,
+                color='#75238C',
             ),
+            showlegend=True,
+            name='Emergency service incidents'
         )
     )
-    if mode == 'actual':
-        fig.add_trace(  # actual match
-            go.Scattermapbox(
-                lat=matches_y.flatten(),
-                lon=matches_x.flatten(),
-                mode='lines',
-                marker=go.scattermapbox.Marker(
-                    size=10,
-                    color='#89CFF0',
-                ),
-            )
-        )
-    elif mode == 'nearest':
-        fig.update_layout(
-            mapbox_layers=[  # nearest match
-                {
-                    "sourcetype": "geojson",
-                    "type": "line",
-                    "color": "grey",
-                    "line": {"dash": [2.5, 1]},
-                    "source": gj_c,
-                },
-                {
-                    "sourcetype": "geojson",
-                    "type": "line",
-                    "color": "#AA4A44",
-                    "line": {"dash": [2.5, 1]},
-                    "source": gj_o,
-                },
-            ],
-        )
     fig.update_layout(
         mapbox=dict(
             accesstoken=open("./utils/mapboxToken.txt").read(),
-            style="carto-positron",
+            style="light",
             zoom=11,
-            center=dict(lat=36.835, lon=-76.08),
+            center=dict(lat=36.835, lon=-76.09),
         ),
-        # mapbox_layers=[  # nearest match
-        #     {
-        #         "sourcetype": "geojson",
-        #         "type": "line",
-        #         "color": "grey",
-        #         "line": {"dash": [2.5, 1]},
-        #         "source": gj_c,
-        #     },
-        #     {
-        #         "sourcetype": "geojson",
-        #         "type": "line",
-        #         "color": "#AA4A44",
-        #         "line": {"dash": [2.5, 1]},
-        #         "source": gj_o,
-        #     },
-        # ],
-        width=1000,
-        height=800,
-        showlegend=False,
+        width=700,
+        height=650,
+        showlegend=True,
+        paper_bgcolor="black",
+        plot_bgcolor="white",
+        margin=dict(l=2, r=2, t=2, b=2),
+        legend=dict(
+            x=0.01,
+            y=0.99,
+            bgcolor="rgba(255,255,255,0.75)",
+            bordercolor="rgba(80,80,80,1)",
+            borderwidth=1,
+            font=dict(
+                size=16, family="Arial", color="black",
+            )
+        ),
+        # fig.update_layout(
+        #     mapbox_layers=[  # nearest match
+        #         {
+        #             "sourcetype": "geojson",
+        #             "type": "line",
+        #             "color": "#F2B680",
+        #             "line": {"dash": [2.5, 1]},
+        #             "source": gj_c,
+        #         },
+        #         {
+        #             "sourcetype": "geojson",
+        #             "type": "line",
+        #             "color": "#AA4A44",
+        #             "line": {"dash": [2.5, 1]},
+        #             "source": gj_o,
+        #         },
+        #     ],
+        # )
     )
     fig.show(renderer="browser")
+    fig.write_image(
+        f"./manuscripts/figs/map_origin_shift_{mode}.png", engine="orca",
+        width=700, height=650, scale=3.125
+    )
 
     return
 
@@ -860,4 +907,74 @@ def bar_wellness(lower, higher):
     )
 
 
+def bar_capacity_short(gdf):
+    pass
+    return
+
+def scatter_income_service_volumn(incidents, closing_info):
+    import pandas as pd
+    station_ave_income = incidents[['Rescue Squad Number', 'demographic_value']].groupby(
+        'Rescue Squad Number'
+    ).mean()
+    station_volume = incidents[['Rescue Squad Number', 'demographic_value']].groupby(
+        'Rescue Squad Number'
+        ).count().rename(columns={'demographic_value': 'count'})
+    stations = pd.concat([station_ave_income, station_volume], axis=1)
+    stations['status'] = ['Operating'] * len(stations)
+    stations = stations.reset_index()
+
+    problem_station = closing_info[
+        (closing_info['if_nearest_occupied'] == True) | closing_info['if_nearest_closed'] == True
+        ]['Number_nearest'].unique()
+    stations.loc[stations['Rescue Squad Number'].isin(problem_station), 'status'] = 'Disrupted'
+
+    fig = px.scatter(
+        stations, x='demographic_value', y='count', color='status',
+        color_discrete_map={'Operating': '#808080', 'Disrupted': '#75238C',},
+        trendline="ols", trendline_scope="overall"
+    )
+    fig.update_layout(
+        xaxis=dict(
+            title='Average household income<br>of incidents served (USD)',
+            showline=True,
+            linewidth=2,
+            linecolor='black',
+            showgrid=False,
+            ticks='outside',
+            tickformat=',',
+            zeroline=False,
+        ),
+        yaxis=dict(
+            title='Incidents served count',
+            showline=True,
+            linewidth=2,
+            linecolor='black',
+            showgrid=False,
+            ticks='outside',
+            tickformat=',',
+            zeroline=False,
+        ),
+        font=dict(family="Arial", size=18, color="black"),
+        width=465, height=450,
+        legend=dict(
+            x=0.85, y=0.95, xanchor="center", yanchor="top", title_text=None,
+            bordercolor='#808080', borderwidth=1.5,
+        ),
+        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+        margin=dict(l=50, r=50, t=50, b=50)
+    )
+    fig.update_traces(
+        selector=dict(mode='lines'), showlegend=False,
+        line=dict(color='#808080', dash='dash', width=1)
+    )
+    fig.update_traces(
+        selector=dict(mode='markers'),
+        marker=dict(size=10)
+    )
+    fig.show(renderer="browser")
+    fig.write_image(
+        "./manuscripts/figs/scatter_income_volume.png", engine="orca",
+        width=460, height=450, scale=3.125
+    )
+    return
 

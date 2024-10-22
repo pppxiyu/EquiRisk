@@ -117,19 +117,26 @@ def reg_build_matrix(gdf, method, k=None):
 
 
 def reg_shift_test_bootstrapping(
-        gdf1, gdf2, method,
+        gdf1_input, gdf2_input, method,
         x_col='demographic_value', y_col='diff_travel', n_iter=1000, w_lag=1,
         k1=None, k2=None, weight_method='KNN',
         spillover=False,
 ):
+    gdf1 = gdf1_input.copy()
+    gdf2 = gdf2_input.copy()
+    intersection_df = pd.merge(gdf1, gdf2, on='geometry', how='inner')
+    gdf1 = gdf1[gdf1['geometry'].isin(intersection_df['geometry'])]
+    gdf2 = gdf2[gdf2['geometry'].isin(intersection_df['geometry'])]
+    assert (gdf1['geometry'] == gdf2['geometry']).all()
+    assert len(gdf1) == len(gdf2)
+
     diff = []
     c = 0
     for _ in range(n_iter):
-        resample_i_1 = np.random.choice(len(gdf1), size=len(gdf1), replace=True)
-        resample_i_2 = np.random.choice(len(gdf2), size=len(gdf2), replace=True)
+        resample_i = np.random.choice(len(gdf1), size=len(gdf1), replace=True)
 
-        gdf1_resample = gdf1.iloc[resample_i_1].copy()
-        gdf2_resample = gdf2.iloc[resample_i_2].copy()
+        gdf1_resample = gdf1.iloc[resample_i].copy()
+        gdf2_resample = gdf2.iloc[resample_i].copy()
 
         knn_1 = reg_build_matrix(gdf1_resample, weight_method, k=k1)
         knn_2 = reg_build_matrix(gdf2_resample, weight_method, k=k2)
@@ -137,6 +144,7 @@ def reg_shift_test_bootstrapping(
         knn_2.silence_warnings = True
         knn_1.transform = 'r'
         knn_2.transform = 'r'
+        assert (knn_1.full()[0] == knn_2.full()[0]).all() == True
 
         try:
             if method == 'GM_Combo_Het':
@@ -220,6 +228,9 @@ def reg_shift_test_bootstrapping(
             b_2 = reg_2.betas[1, 0]
             diff.append(b_1 - b_2)
 
+        if c % 100 == 0:
+            print(f"p-value at Iteration {c}: {1 - np.mean(np.array(diff) > 0)}.")
+
     diff_array = np.array(diff)
     p = np.mean(diff_array > 0)
     print(f'{c} interation finished.')
@@ -232,6 +243,7 @@ def reg_shift_test_regime(
         gdf1, gdf2, k, method,
         x_col='demographic_value', y_col="diff_travel", w_lag=1,
 ):
+    # RETIRED, the modeling is not correct
     gdf1['group'] = [0] * len(gdf1)
     gdf2['group'] = [1] * len(gdf2)
 
