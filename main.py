@@ -533,7 +533,6 @@ if __name__ == "__main__":
     #         severity_metrics.tolist(), columns=['severity', 'income'], index=severity_metrics.index
     #     )
     # )
-
     #####
 
     ###### Results 3
@@ -544,7 +543,7 @@ if __name__ == "__main__":
     #             dir_road_cube6, f'{dir_road_cube6_out_c}/{l}_FDBKNET_LINK.dbf'
     #         )
     #         vis.map_road_speed(road_segment, 'TIME_1', label=f'_complete_{l}')
-    #
+
     # # disrupted net
     # for l in period_short:
     #     if os.path.exists(f'{dir_road_cube6_out_d}_{l}/{l}_FDBKNET_LINK.dbf'):
@@ -552,6 +551,34 @@ if __name__ == "__main__":
     #             dir_road_cube6, f'{dir_road_cube6_out_d}_{l}/{l}_FDBKNET_LINK.dbf'
     #         )
     #         vis.map_road_speed(road_segment, 'TIME_1', label=f'_disrupted_{l}')
+
+    # # income vs congestion
+    # metrics_df_list = []
+    # for l, n in zip(
+    #         period_short, ['AM Peak', 'Midday Off-peak', 'PM Peak', 'Night Off-peak']
+    # ):
+    #     if os.path.exists(f'{dir_road_cube6_out_d}_{l}/{l}_FDBKNET_LINK.dbf'):
+    #         road_segment = pp_r.merge_road_info_VDOT(
+    #             dir_road_cube6, f'{dir_road_cube6_out_d}_{l}/{l}_FDBKNET_LINK.dbf'
+    #         )
+    #         road_segment = pp_r.add_geo_unit(road_segment, dir_bg_boundaries, ['TRACTCE', 'BLKGRPCE'])
+    #         road_segment = pp_r.merge_roads_demographic_bg(
+    #             road_segment, pp_i.import_demographic(dir_income_bg, ['B19013_001E'], ['9901'])
+    #         )
+    #         road_segment = road_segment[~road_segment['demographic_value'].isna()].fillna(0)
+    #         congestion_metrics = road_segment.groupby('id').apply(
+    #             lambda group: pp_r.calculate_congestion_metric(group, 'FFTIME', 'TIME_1')
+    #         )
+    #         import pandas as pd
+    #         congestion_metrics_df = pd.DataFrame(
+    #                 congestion_metrics.tolist(), columns=['congestion', 'income'], index=congestion_metrics.index
+    #             )
+    #         congestion_metrics_df['period'] = [n] * len(congestion_metrics_df)
+    #         metrics_df_list.append(congestion_metrics_df)
+    #     else:
+    #         raise ValueError('File missing.')
+    # vis.scatter_income_vs_congestion(metrics_df_list,)
+    #####
 
     ###### Other vis
     # incidents = calculate_incidents_with_gis_travel_time(op=1)
