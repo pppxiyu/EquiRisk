@@ -647,3 +647,17 @@ def calculate_severity_metric(group, cutoff_thr, depth_unit, depth_cols):
     income = group['demographic_value'].mean()
     return metric, income
 
+
+def calculate_congestion_metric(group, ff_time, congestion_time):
+    group = group[group[ff_time] > 1e-3]
+    group = group[group[congestion_time] > 1e-3]
+    group['ff_speed'] = 1 / group[ff_time]
+    group['congestion_speed'] = 1 / group[congestion_time]
+
+    group['length'] = group.geometry.length
+    group['length_weights'] = group['length'] / group['length'].sum()
+
+    metric = 1 - ((group['congestion_speed'] / group['ff_speed']) * group['length_weights']).sum()
+    income = group['demographic_value'].mean()
+    return metric, income
+

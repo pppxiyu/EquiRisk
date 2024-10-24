@@ -1011,7 +1011,7 @@ def scatter_inundation_severity_vs_income(df):
             zeroline=False,
         ),
         yaxis=dict(
-            title='Severity metric',
+            title='Road inundation severity',
             showline=True,
             linewidth=2,
             linecolor='black',
@@ -1044,3 +1044,49 @@ def scatter_inundation_severity_vs_income(df):
     )
     return
 
+
+def scatter_income_vs_congestion(df_list):
+    import pandas as pd
+    df = pd.concat(df_list, axis=0, ignore_index=True)
+
+    color_list = ['#0FA66E', '#8A9A5B', '#D98A29', '#5FB6D9']
+    fig = px.scatter(
+        df, x='income', y='congestion', color='period',
+        color_discrete_sequence=color_list
+    )
+    fig.update_layout(
+        xaxis=dict(
+            title='Median household income (USD)',
+            showline=True,
+            linewidth=2,
+            linecolor='black',
+            showgrid=False,
+            ticks='outside',
+            tickformat=',',
+            zeroline=False,
+        ),
+        yaxis=dict(
+            title='Congestion severity',
+            showline=True,
+            linewidth=2,
+            linecolor='black',
+            showgrid=False,
+            ticks='outside',
+            tickformat=',',
+            zeroline=False,
+        ),
+        font=dict(family="Arial", size=18, color="black"),
+        legend=dict(
+            x=0.75, y=1, xanchor="center", yanchor="top", title_text=None,
+            bordercolor='#808080', borderwidth=1.5, font=dict(size=16)
+        ),
+        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+        width=465, height=450,
+        margin=dict(l=50, r=50, t=50, b=50)
+    )
+    fig.show(renderer="browser")
+    fig.write_image(
+        f"./manuscripts/figs/scatter_income_congestion.png", engine="orca",
+        width=465, height=450, scale=3.125
+    )
+    return
