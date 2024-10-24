@@ -8,6 +8,7 @@ nd_name = 'road_nd'
 nd_layer_name = 'road_nd_layer'
 turn_name = 'turn_restriction'
 service_area_threshold = 324
+road_cutoff_threshold = 30  # centimeter
 
 period_dict = {
     '2016-10-09 00:00:00': 25,

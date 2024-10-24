@@ -172,7 +172,7 @@ def scatter_demo_vs_error(
         df, xaxis, yaxis='Travel time<br>estimation error (s)',
         reg_line=None, color='#3F6F8C', size=17.5,
         col_demo='demographic_value', col_error='diff_travel',
-        save_label=None,
+        save_label=None, op_label='',
 ):
     xrange = extend_and_round_range([df[col_demo].min(), df[col_demo].max()], extension_percent=0.05)
     fig = px.scatter(
@@ -240,7 +240,7 @@ def scatter_demo_vs_error(
         else:
             p_label = 'n'
         fig.write_image(
-            f"./manuscripts/figs/scatter_demo_vs_error_{save_label}_{p_label}.png", engine="orca",
+            f"./manuscripts/figs/scatter_demo_vs_error_{save_label}_{p_label}{op_label}.png", engine="orca",
             width=570, height=475, scale=3.125
         )
 
@@ -452,7 +452,7 @@ def line_cut_n_ave_wellness(geo_units, threshold_percent, cut_mode,):
     return
 
 
-def map_road_speed(gdf, time_col):
+def map_road_speed(gdf, time_col, label=''):
     import shapely
     import numpy as np
     import pandas as pd
@@ -505,17 +505,33 @@ def map_road_speed(gdf, time_col):
         lat=lats,
         lon=lons,
         color=colors,
-        zoom=10.7,
         color_discrete_map=interval_color_map,
         mapbox_style='light',
     )
     fig.update_layout(
         legend=dict(
-            title="Speed intervals (mile/h)",
-        )
+            title="Speed intervals (mph)",
+            x=0.03,
+            y=0.01,
+            xanchor="left",
+            yanchor="bottom",
+        ),
+        mapbox=dict(
+            center=dict(
+                lat=36.773,
+                lon=-76.068,
+            ),
+            zoom=10.15
+        ),
+        width=610,
+        height=800,
     )
-    fig.for_each_trace(lambda trace: trace.update(visible='legendonly') if trace.name == 'Zero speed' else ())
+    # fig.for_each_trace(lambda trace: trace.update(visible='legendonly') if trace.name == 'Zero speed' else ())
     fig.show(renderer="browser")
+    fig.write_image(
+        f"./manuscripts/figs/map_traffic{label}.png", engine="orca",
+        width=610, height=800, scale=3.125
+    )
 
 
 def map_origin_shift(gdf_incidents, gdf_station, mode='nearest'):
@@ -591,7 +607,7 @@ def map_origin_shift(gdf_incidents, gdf_station, mode='nearest'):
                     color='#F2B680',
                 ),
                 showlegend=True,
-                name='Nearest dispatches but station closed'
+                name='Nearest dispatches but<br>station closed'
             )
         )
         matches_x_o, matches_y_o = get_matches(gdf_i_occupied)
@@ -605,7 +621,7 @@ def map_origin_shift(gdf_incidents, gdf_station, mode='nearest'):
                     color='#AA4A44',
                 ),
                 showlegend=True,
-                name='Nearest dispatches but station occupied'
+                name='Nearest dispatches but<br>station occupied'
             )
         )
     fig.add_trace(
@@ -663,7 +679,7 @@ def map_origin_shift(gdf_incidents, gdf_station, mode='nearest'):
             accesstoken=open("./utils/mapboxToken.txt").read(),
             style="light",
             zoom=11,
-            center=dict(lat=36.835, lon=-76.09),
+            center=dict(lat=36.840, lon=-76.095),
         ),
         width=700,
         height=650,
@@ -678,7 +694,7 @@ def map_origin_shift(gdf_incidents, gdf_station, mode='nearest'):
             bordercolor="rgba(80,80,80,1)",
             borderwidth=1,
             font=dict(
-                size=16, family="Arial", color="black",
+                size=26, family="Arial", color="black",
             )
         ),
         # fig.update_layout(
@@ -974,7 +990,57 @@ def scatter_income_service_volumn(incidents, closing_info):
     fig.show(renderer="browser")
     fig.write_image(
         "./manuscripts/figs/scatter_income_volume.png", engine="orca",
-        width=460, height=450, scale=3.125
+        width=465, height=450, scale=3.125
+    )
+    return
+
+
+def scatter_inundation_severity_vs_income(df):
+    fig = px.scatter(
+        df, x='income', y='severity', trendline="ols", trendline_scope="overall"
+    )
+    fig.update_layout(
+        xaxis=dict(
+            title='Median household income (USD)<br>',
+            showline=True,
+            linewidth=2,
+            linecolor='black',
+            showgrid=False,
+            ticks='outside',
+            tickformat=',',
+            zeroline=False,
+        ),
+        yaxis=dict(
+            title='Severity metric',
+            showline=True,
+            linewidth=2,
+            linecolor='black',
+            showgrid=False,
+            ticks='outside',
+            tickformat=',',
+            zeroline=False,
+        ),
+        font=dict(family="Arial", size=18, color="black"),
+        legend=dict(
+            x=0.85, y=0.95, xanchor="center", yanchor="top", title_text=None,
+            bordercolor='#808080', borderwidth=1.5,
+        ),
+        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+        width=465, height=450,
+        margin=dict(l=50, r=50, t=50, b=50)
+    )
+    fig.update_traces(
+        selector=dict(mode='lines'), showlegend=False,
+        line=dict(color='#712773', dash='dash', width=2)
+    )
+    fig.update_traces(
+        selector=dict(mode='markers'),
+        marker=dict(size=6, color='#777AA6')
+    )
+    fig.show(renderer="browser")
+    fig.write_image(
+        "./manuscripts/figs/scatter_income_severity.png", engine="orca",
+        width=465, height=450, scale=3.125
     )
     return
 

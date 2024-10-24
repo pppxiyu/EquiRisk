@@ -617,3 +617,33 @@ def edit_net_sqlite(original_sql, new_sql, nets, period_split, table_name):
 
     return
 
+
+def add_geo_unit(roads, dir_unit, id_col_geo):
+    unit_geo = gpd.read_file(dir_unit)
+    unit_geo = unit_geo[id_col_geo + ['geometry']]
+    unit_geo = unit_geo.to_crs(roads.crs)
+    incidents = roads.sjoin(unit_geo, how='left')
+    return incidents
+
+
+def merge_roads_demographic_bg(roads, demographic):
+    demographic['tract_name_adapt'] = '0' + (demographic['tract_name'].astype(float) * 100).astype(int).astype(str)
+    demographic['id'] = demographic['tract_name_adapt'] + demographic['block_group_name']
+    roads['id'] = roads['TRACTCE'] + roads['BLKGRPCE']
+    roads = roads.merge(demographic, how='left', on='id')
+    return roads
+
+
+def calculate_severity_metric(group, cutoff_thr, depth_unit, depth_cols):
+    group['ave_max_depth'] = group[depth_cols].mean(axis=1)
+    max_severity = (group['length'] * cutoff_thr).sum()
+    if depth_unit == 'cm':
+        severity = (group['length'] * group['ave_max_depth']).sum()
+    elif depth_unit == 'ft':
+        severity = (group['length'] * group['ave_max_depth']*30.48).sum()
+    else:
+        raise ValueError('Specify unit.')
+    metric = severity / max_severity
+    income = group['demographic_value'].mean()
+    return metric, income
+

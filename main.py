@@ -8,6 +8,7 @@ import utils.regression as reg
 from config_vb import *
 # from config_chs import *
 import geopandas as gpd
+import os
 
 
 def pull_road_data_osm():
@@ -147,14 +148,14 @@ def build_full_graph_arcgis():
 
 def calculate_all_routes(op):
     rescue_sta = pp_s.import_rescue_station(dir_rescue_station_n_nearest_geo)
-    incidents = pp_i.import_incidents_add_info(
+    icd = pp_i.import_incidents_add_info(
         dir_incidents, rescue_sta, period_dict, routing_nearest=dir_incidents_routing_nearest,
     )
 
     if op == 0:
         # OP0: normal
         road_segment = pp_r.import_road_seg_w_inundation_info(dir_road_inundated, speed_assigned)
-        route_analysis = mo.RouteAnalysis(incidents, 'Number_nearest')
+        route_analysis = mo.RouteAnalysis(icd, 'Number_nearest')
         route_analysis.run_route_analysis_arcgis(
             geodatabase_addr, fd_name, nd_name, nd_layer_name,
             rescue_sta, road_segment, if_do_normal=True, if_do_flood=False,
@@ -163,7 +164,7 @@ def calculate_all_routes(op):
     if op == 1:
         # OP1: nearest origin
         road_segment = pp_r.import_road_seg_w_inundation_info(dir_road_inundated, speed_assigned)
-        route_analysis = mo.RouteAnalysis(incidents, 'Number_nearest')
+        route_analysis = mo.RouteAnalysis(icd, 'Number_nearest')
         route_analysis.run_route_analysis_arcgis(
             geodatabase_addr, fd_name, nd_name, nd_layer_name,
             rescue_sta, road_segment, if_do_normal=False,
@@ -172,7 +173,7 @@ def calculate_all_routes(op):
     elif op == 2:
         # OP2: real origin
         road_segment = pp_r.import_road_seg_w_inundation_info(dir_road_inundated, speed_assigned)
-        route_analysis = mo.RouteAnalysis(incidents, 'Rescue Squad Number', mode_label='_o')
+        route_analysis = mo.RouteAnalysis(icd, 'Rescue Squad Number', mode_label='_o')
         route_analysis.run_route_analysis_arcgis(
             geodatabase_addr, fd_name, nd_name, nd_layer_name,
             rescue_sta, road_segment,
@@ -200,7 +201,7 @@ def calculate_all_routes(op):
             VDOT_speed_col = 'CSPD_1',
             osm_match_vdot=dir_match_osm_n_VDOT,
         )
-        route_analysis = mo.RouteAnalysis(incidents, 'Number_nearest', mode_label='_daily_c')
+        route_analysis = mo.RouteAnalysis(icd, 'Number_nearest', mode_label='_daily_c')
         route_analysis.run_route_analysis_arcgis(
             geodatabase_addr, fd_name, nd_name, nd_layer_name,
             rescue_sta, road_segment,
@@ -228,7 +229,7 @@ def calculate_all_routes(op):
             VDOT_speed_col='TIME_1',
             osm_match_vdot=dir_match_osm_n_VDOT,
         )
-        route_analysis = mo.RouteAnalysis(incidents, 'Number_nearest', mode_label='_flood_c')
+        route_analysis = mo.RouteAnalysis(icd, 'Number_nearest', mode_label='_flood_c')
         route_analysis.run_route_analysis_arcgis(
             geodatabase_addr, fd_name, nd_name, nd_layer_name,
             rescue_sta, road_segment,
@@ -256,7 +257,7 @@ def calculate_all_routes(op):
             VDOT_speed_col='TIME_1',
             osm_match_vdot=dir_match_osm_n_VDOT,
         )
-        route_analysis = mo.RouteAnalysis(incidents, 'Rescue Squad Number', mode_label='_all')
+        route_analysis = mo.RouteAnalysis(icd, 'Rescue Squad Number', mode_label='_all')
         route_analysis.run_route_analysis_arcgis(
             geodatabase_addr, fd_name, nd_name, nd_layer_name,
             rescue_sta, road_segment,
@@ -397,27 +398,6 @@ def calculate_incidents_metrics(inc, demo_label='income'):
     return icd_f, icd_n, demo, g_units_f, g_units_n
 
 
-def shift_test(gdf_1, gdf_2, reg_b_1, reg_b_2, reg_s_1, reg_s_2):
-    gdf_1['s_dependency'] = reg_s_1.q
-    gdf_2['s_dependency'] = reg_s_2.q
-
-    demo_cov = reg.reg_SUR(
-        gdf_1[gdf_1['id'].isin(gdf_2['id'])][
-            ['demographic_value', 's_dependency']
-        ].values,
-        gdf_1[gdf_1['id'].isin(gdf_2['id'])]['diff_travel'].values,
-        gdf_2[gdf_2['id'].isin(gdf_1['id'])][
-            ['demographic_value', 's_dependency']
-        ].values,
-        gdf_2[gdf_2['id'].isin(gdf_1['id'])]['diff_travel'].values,
-    )
-    score = reg.reg_z_score_4_compared_coeff(
-        reg_b_1.betas[1][0], reg_b_2.betas[1][0], reg_b_1.std_err[1], reg_b_2.std_err[1], demo_cov,
-    )
-    print(f'z score for the one-side test is {score}.')
-    return score
-
-
 if __name__ == "__main__":
 
     ########
@@ -490,109 +470,88 @@ if __name__ == "__main__":
     # )
     # #######
 
-    ##### Results 2
-    # # reg
-    # _, _, _, geo_units_f_op2, _ = calculate_incidents_metrics(
-    #     calculate_incidents_with_gis_travel_time(op=2), demo_label='income',
-    # )
-    # reg_model = reg.reg_spatial_lag(geo_units_f_op2, w_lag=1, method='ML', weight_method='Queen',)
-
-    # # shift test
+    #### Regression analysis 2-5
     # _, _, _, geo_units_f_op1, _ = calculate_incidents_metrics(
     #     calculate_incidents_with_gis_travel_time(op=1), demo_label='income',
     # )
-    # _, _, _, geo_units_f_op2, _ = calculate_incidents_metrics(
-    #     calculate_incidents_with_gis_travel_time(op=2), demo_label='income',
-    # )
-    # reg.reg_shift_test_bootstrapping(
-    #     geo_units_f_op1, geo_units_f_op2,'ML', weight_method='Queen', w_lag=1,
-    #     n_iter=5000,
-    # )
+    # for option in [2, 3, 4, 5]:  # 2-origin; 3-daily traffic; 4-flood congestion; 5-all
+    #     print(f'Analysis for Option {option}.')
+    #     _, _, _, geo_units_f_op2345, _ = calculate_incidents_metrics(
+    #         calculate_incidents_with_gis_travel_time(op=option), demo_label='income',
+    #     )
+    #     reg_model = reg.reg_spatial_lag(geo_units_f_op2345, w_lag=1, method='ML', weight_method='Queen',)
+    #     reg.reg_shift_test_bootstrapping(
+    #         geo_units_f_op1, geo_units_f_op2345,'ML', weight_method='Queen', w_lag=1,
+    #         n_iter=5000,
+    #     )
+    #     vis.scatter_demo_vs_error(
+    #         geo_units_f_op2345, color='#235689',
+    #         reg_line=[reg_model.betas[1, 0], reg_model.betas[0, 0]],
+    #         xaxis='Median household income (USD)', save_label='income',
+    #         op_label=f'_op{option}',
+    #     )
 
-    # micro-scale examination
-    _, incidents_n, _, _, _ = calculate_incidents_metrics(
-        calculate_incidents_with_gis_travel_time(op=1), demo_label='income',
-    )
-    rescue_station = pp_s.import_rescue_station(dir_rescue_station_n_nearest_geo)
-    incidents = pp_i.import_incidents_add_info(
-        dir_incidents, rescue_station, period_dict, routing_nearest=dir_incidents_routing_nearest,
-    )
-    incidents_shift = incidents[incidents['Number_nearest'] != incidents['Number_actual']]
-    incidents_shift_f = incidents_shift[~incidents_shift['period_actual'].isna()]
-    incidents_shift_f.loc[:, ['if_nearest_occupied', 'if_nearest_closed']] = incidents_shift_f.apply(
-        lambda x: pp_s.check_occupation(
-            x, station_col='Number_nearest', time_col='Call Date and Time', incidents=incidents,
-        ),
-        axis=1, result_type='expand'
-    ).values
-    # vis.scatter_income_service_volumn(incidents_n, incidents_shift_f)
+    #### Results 2
+    # # micro-scale examination
+    # rescue_station = pp_s.import_rescue_station(dir_rescue_station_n_nearest_geo)
+    # incidents = pp_i.import_incidents_add_info(
+    #     dir_incidents, rescue_station, period_dict, routing_nearest=dir_incidents_routing_nearest,
+    # )
+    # incidents_shift = incidents[incidents['Number_nearest'] != incidents['Number_actual']]
+    # incidents_shift_f = incidents_shift[~incidents_shift['period_actual'].isna()]
+    # incidents_shift_f.loc[:, ['if_nearest_occupied', 'if_nearest_closed']] = incidents_shift_f.apply(
+    #     lambda x: pp_s.check_occupation(
+    #         x, station_col='Number_nearest', time_col='Call Date and Time', incidents=incidents,
+    #     ),
+    #     axis=1, result_type='expand'
+    # ).values
     # vis.map_origin_shift(incidents_shift_f, rescue_station, mode='actual')
-    vis.map_origin_shift(incidents_shift_f, rescue_station, mode='nearest')
+    # vis.map_origin_shift(incidents_shift_f, rescue_station, mode='nearest')
 
-    ######
+    # # income vs service count
+    # _, incidents_n, _, _, _ = calculate_incidents_metrics(
+    #     calculate_incidents_with_gis_travel_time(op=1), demo_label='income',
+    # )
+    # vis.scatter_income_service_volumn(incidents_n, incidents_shift_f)
 
-    # ###### Results 3
-    # # reg
-    # incidents_op1 = calculate_incidents_with_gis_travel_time(op=1)
-    # _, _, _, geo_units_f_op1, _ = calculate_incidents_metrics(incidents_op1)
-    # incidents_op3 = calculate_incidents_with_gis_travel_time(op=3)
-    # _, _, _, geo_units_f_op3, _ = calculate_incidents_metrics(incidents_op3)
-    #
-    #
-    #
-    # # vis
+    # # income vs flooding severity
+    # road_segment = pp_r.import_road_seg_w_inundation_info(dir_road_inundated, speed_assigned)
+    # road_segment = pp_r.add_geo_unit(road_segment, dir_bg_boundaries, ['TRACTCE', 'BLKGRPCE'])
+    # road_segment = pp_r.merge_roads_demographic_bg(
+    #     road_segment, pp_i.import_demographic(dir_income_bg, ['B19013_001E'],  ['9901'])
+    # )
+    # road_segment = road_segment[road_segment['bridge'].isna()]
+    # road_segment = road_segment[~road_segment['demographic_value'].isna()].fillna(0)
+    # depth_cols = [i for i in road_segment.columns if i.startswith('max_depth')]
+    # road_segment[depth_cols] = (road_segment[depth_cols] * 30.48).clip(upper=road_cutoff_threshold)
+    # severity_metrics = road_segment.groupby('id').apply(
+    #     lambda group: pp_r.calculate_severity_metric(group, road_cutoff_threshold, 'cm', depth_cols)
+    # )
+    # import pandas as pd
+    # vis.scatter_inundation_severity_vs_income(
+    #     pd.DataFrame(
+    #         severity_metrics.tolist(), columns=['severity', 'income'], index=severity_metrics.index
+    #     )
+    # )
+
+    #####
+
+    ###### Results 3
+    # # complete net
     # for l in period_short:
     #     if os.path.exists(f'{dir_road_cube6_out_c}/{l}_FDBKNET_LINK.dbf'):
     #         road_segment = pp_r.merge_road_info_VDOT(
     #             dir_road_cube6, f'{dir_road_cube6_out_c}/{l}_FDBKNET_LINK.dbf'
     #         )
-    #         vis.map_road_speed(road_segment, 'TIME_1')
-    # ######
+    #         vis.map_road_speed(road_segment, 'TIME_1', label=f'_complete_{l}')
     #
-    # ###### Results 4
-    # # reg
-    # incidents_op1 = calculate_incidents_with_gis_travel_time(op=1)
-    # _, _, _, geo_units_f_op1, _ = calculate_incidents_metrics(incidents_op1)
-    # incidents_op4 = calculate_incidents_with_gis_travel_time(op=4)
-    # _, _, _, geo_units_f_op4, _ = calculate_incidents_metrics(incidents_op4)
-    #
-    # reg.reg_spatial_lag(geo_units_f_op1, 4, method='ML')
-    # reg.reg_spatial_lag(geo_units_f_op4, 4, method='ML')
-    # reg.reg_shift_test_bootstrapping(geo_units_f_op1, geo_units_f_op1, 4, 4, method='ML')
-    # reg.reg_shift_test_regime(geo_units_f_op1, geo_units_f_op4, 4, method='ML')
-    #
-    # # vis
+    # # disrupted net
     # for l in period_short:
-    #     f_dir = f'{dir_road_cube6_out_d}_{l}/{l}_FDBKNET_LINK.dbf'
-    #     if os.path.exists(f_dir):
+    #     if os.path.exists(f'{dir_road_cube6_out_d}_{l}/{l}_FDBKNET_LINK.dbf'):
     #         road_segment = pp_r.merge_road_info_VDOT(
-    #             dir_road_cube6, f_dir
+    #             dir_road_cube6, f'{dir_road_cube6_out_d}_{l}/{l}_FDBKNET_LINK.dbf'
     #         )
-    #         vis.map_road_speed(road_segment, 'TIME_1')
-    #
-    # incidents = calculate_incidents_with_gis_travel_time(op=4)
-    # _, _, _, geo_units_flood, _ = calculate_incidents_metrics(incidents)
-    # vis.scatter_demo_vs_error(
-    #     geo_units_flood, 'demographic_value', 'diff_travel',
-    #     yaxis='Travel time estimation error (s)',
-    #     xaxis='Median household income (USD) ',
-    #     xrange=[20000, 140000],
-    # )
-    #
-    # ###### Results 5: origin shift + flood congestion
-    # incidents_op1 = calculate_incidents_with_gis_travel_time(op=1)
-    # _, _, _, geo_units_f_op1, _ = calculate_incidents_metrics(incidents_op1)
-    # incidents_op5 = calculate_incidents_with_gis_travel_time(op=5)
-    # _, _, _, geo_units_f_op5, _ = calculate_incidents_metrics(incidents_op5)
-    #
-    # reg.reg_shift_test_bootstrapping(
-    #     geo_units_f_op1, geo_units_f_op5,
-    #     'ML',
-    #     weight_method='Queen',
-    #     # k1=3, k2=3, weight_method='KNN',
-    #     w_lag=1,
-    #     # spillover=True
-    # )
+    #         vis.map_road_speed(road_segment, 'TIME_1', label=f'_disrupted_{l}')
 
     ###### Other vis
     # incidents = calculate_incidents_with_gis_travel_time(op=1)

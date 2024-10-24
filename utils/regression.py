@@ -316,3 +316,26 @@ def reg_shift_test_regime(
     print(reg.summary)
     print(f'covariance is {reg.vm[1, 1 + reg.vm.shape[0] // 2]}')
     return reg
+
+
+def shift_test_legacy(gdf_1, gdf_2, reg_b_1, reg_b_2, reg_s_1, reg_s_2):
+    # do not use it, wrong modeling
+    gdf_1['s_dependency'] = reg_s_1.q
+    gdf_2['s_dependency'] = reg_s_2.q
+
+    demo_cov = reg_SUR(
+        gdf_1[gdf_1['id'].isin(gdf_2['id'])][
+            ['demographic_value', 's_dependency']
+        ].values,
+        gdf_1[gdf_1['id'].isin(gdf_2['id'])]['diff_travel'].values,
+        gdf_2[gdf_2['id'].isin(gdf_1['id'])][
+            ['demographic_value', 's_dependency']
+        ].values,
+        gdf_2[gdf_2['id'].isin(gdf_1['id'])]['diff_travel'].values,
+    )
+    score = reg_z_score_4_compared_coeff(
+        reg_b_1.betas[1][0], reg_b_2.betas[1][0], reg_b_1.std_err[1], reg_b_2.std_err[1], demo_cov,
+    )
+    print(f'z score for the one-side test is {score}.')
+    return score
+
