@@ -492,7 +492,7 @@ if __name__ == "__main__":
     #     )
 
     #### Results 2
-    # # micro-scale examination
+    # # microscale examination
     # rescue_station = pp_s.import_rescue_station(dir_rescue_station_n_nearest_geo)
     # incidents = pp_i.import_incidents_add_info(
     #     dir_incidents, rescue_station, period_dict, routing_nearest=dir_incidents_routing_nearest,
@@ -500,7 +500,7 @@ if __name__ == "__main__":
     # incidents_shift = incidents[incidents['Number_nearest'] != incidents['Number_actual']]
     # incidents_shift_f = incidents_shift[~incidents_shift['period_actual'].isna()]
     # incidents_shift_f.loc[:, ['if_nearest_occupied', 'if_nearest_closed']] = incidents_shift_f.apply(
-    #     lambda x: pp_s.check_occupation(
+    #     lambda x: pp_s.check_closure_n_occupation(
     #         x, station_col='Number_nearest', time_col='Call Date and Time', incidents=incidents,
     #     ),
     #     axis=1, result_type='expand'
@@ -512,7 +512,8 @@ if __name__ == "__main__":
     # _, incidents_n, _, _, _ = calculate_incidents_metrics(
     #     calculate_incidents_with_gis_travel_time(op=1), demo_label='income',
     # )
-    # vis.scatter_income_service_volumn(incidents_n, incidents_shift_f)
+    # vis.scatter_income_service_volumn(incidents_n, incidents_shift_f, 'scatter')
+    # vis.scatter_income_service_volumn(incidents_n, incidents_shift_f, 'dist')
 
     # # income vs flooding severity
     # road_segment = pp_r.import_road_seg_w_inundation_info(dir_road_inundated, speed_assigned)
@@ -532,6 +533,57 @@ if __name__ == "__main__":
     #     pd.DataFrame(
     #         severity_metrics.tolist(), columns=['severity', 'income'], index=severity_metrics.index
     #     )
+    # )
+
+    # # percent non-nearest
+    # rescue_station = pp_s.import_rescue_station(dir_rescue_station_n_nearest_geo)
+    # incidents = pp_i.import_incidents_add_info(
+    #     dir_incidents, rescue_station, period_dict, routing_nearest=dir_incidents_routing_nearest,
+    # )
+    # percent_normal = len(
+    #     incidents[(incidents['period_actual'].isna()) & (incidents['Number_nearest'] != incidents['Number_actual'])]
+    # ) / len(incidents[incidents['period_actual'].isna()])
+    # percent_flood = len(
+    #     incidents[(~incidents['period_actual'].isna()) & (incidents['Number_nearest'] != incidents['Number_actual'])]
+    # ) / len(incidents[~incidents['period_actual'].isna()])
+    # vis.bar_per_non_nearest(percent_normal, percent_flood)
+
+    # # non-nearest reasons
+    # rescue_station = pp_s.import_rescue_station(dir_rescue_station_n_nearest_geo)
+    # incidents = pp_i.import_incidents_add_info(
+    #     dir_incidents, rescue_station, period_dict, routing_nearest=dir_incidents_routing_nearest,
+    # )
+    # incidents_shift = incidents[incidents['Number_nearest'] != incidents['Number_actual']]
+    # incidents_shift.loc[:, ['if_nearest_occupied', 'if_nearest_closed']] = incidents_shift.apply(
+    #     lambda x: pp_s.check_closure_n_occupation(
+    #         x, station_col='Number_nearest', time_col='Call Date and Time', incidents=incidents,
+    #     ),
+    #     axis=1, result_type='expand'
+    # ).values
+    # vis.bar_per_nearest_reason(
+    #     incidents_shift[incidents_shift['period_actual'].isna()],
+    #     incidents_shift[~incidents_shift['period_actual'].isna()],
+    # )
+
+    # # ave income of normal and disrupted stations
+    # rescue_station = pp_s.import_rescue_station(dir_rescue_station_n_nearest_geo)
+    # incidents = pp_i.import_incidents_add_info(
+    #     dir_incidents, rescue_station, period_dict, routing_nearest=dir_incidents_routing_nearest,
+    # )
+    # incidents_f, incidents_n, _, _, _ = calculate_incidents_metrics(
+    #     calculate_incidents_with_gis_travel_time(op=1), demo_label='income',
+    # )
+    # incidents_n = incidents_n.merge(
+    #     incidents[['incident_id', 'Number_actual', 'Number_nearest']], how='left', on='incident_id'
+    # )
+    # incidents_f = incidents_f.merge(
+    #     incidents[['incident_id', 'Number_actual', 'Number_nearest']], how='left', on='incident_id'
+    # )
+    # vis.bar_ave_income_normal_disrupted_icd(
+    #     incidents_n[incidents_n['Number_nearest'] == incidents_n['Number_actual']]['demographic_value'].mean(),
+    #     incidents_n[incidents_n['Number_nearest'] != incidents_n['Number_actual']]['demographic_value'].mean(),
+    #     incidents_f[incidents_f['Number_nearest'] == incidents_f['Number_actual']]['demographic_value'].mean(),
+    #     incidents_f[incidents_f['Number_nearest'] != incidents_f['Number_actual']]['demographic_value'].mean(),
     # )
     #####
 
