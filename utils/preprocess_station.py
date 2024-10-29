@@ -22,13 +22,15 @@ def add_nearest_intersection(point, road_intersection):
     return id
 
 
-def check_occupation(row, station_col, time_col, incidents):
+def check_closure_n_occupation(row, station_col, time_col, incidents):
     station = row[station_col]
     time = row[time_col]
 
     station_incidents = incidents[incidents['Rescue Squad Number'] == station]
     station_incidents = station_incidents[station_incidents['Call Date and Time'] <= time]
     station_incidents = station_incidents.sort_values(by='Call Date and Time', ascending=False)
+    if len(station_incidents) == 0:
+        return None, None
     last_incident_ends = station_incidents.iloc[0]['Close Date and Time']
 
     t_delta_all = incidents['Call Date and Time'].diff()

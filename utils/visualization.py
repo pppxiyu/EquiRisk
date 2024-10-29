@@ -927,7 +927,8 @@ def bar_capacity_short(gdf):
     pass
     return
 
-def scatter_income_service_volumn(incidents, closing_info):
+
+def merge_income_service_volumn_status(incidents, closing_info):
     import pandas as pd
     station_ave_income = incidents[['Rescue Squad Number', 'demographic_value']].groupby(
         'Rescue Squad Number'
@@ -936,62 +937,121 @@ def scatter_income_service_volumn(incidents, closing_info):
         'Rescue Squad Number'
         ).count().rename(columns={'demographic_value': 'count'})
     stations = pd.concat([station_ave_income, station_volume], axis=1)
-    stations['status'] = ['Operating'] * len(stations)
+    stations['status'] = ['Available'] * len(stations)
     stations = stations.reset_index()
 
     problem_station = closing_info[
         (closing_info['if_nearest_occupied'] == True) | closing_info['if_nearest_closed'] == True
         ]['Number_nearest'].unique()
-    stations.loc[stations['Rescue Squad Number'].isin(problem_station), 'status'] = 'Disrupted'
+    stations.loc[stations['Rescue Squad Number'].isin(problem_station), 'status'] = 'Unavailable'
+    return stations
 
-    fig = px.scatter(
-        stations, x='demographic_value', y='count', color='status',
-        color_discrete_map={'Operating': '#808080', 'Disrupted': '#75238C',},
-        trendline="ols", trendline_scope="overall"
-    )
-    fig.update_layout(
-        xaxis=dict(
-            title='Average household income<br>of incidents served (USD)',
-            showline=True,
-            linewidth=2,
-            linecolor='black',
-            showgrid=False,
-            ticks='outside',
-            tickformat=',',
-            zeroline=False,
-        ),
-        yaxis=dict(
-            title='Incidents served count',
-            showline=True,
-            linewidth=2,
-            linecolor='black',
-            showgrid=False,
-            ticks='outside',
-            tickformat=',',
-            zeroline=False,
-        ),
-        font=dict(family="Arial", size=18, color="black"),
-        width=465, height=450,
-        legend=dict(
-            x=0.85, y=0.95, xanchor="center", yanchor="top", title_text=None,
-            bordercolor='#808080', borderwidth=1.5,
-        ),
-        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
-        margin=dict(l=50, r=50, t=50, b=50)
-    )
-    fig.update_traces(
-        selector=dict(mode='lines'), showlegend=False,
-        line=dict(color='#808080', dash='dash', width=1)
-    )
-    fig.update_traces(
-        selector=dict(mode='markers'),
-        marker=dict(size=10)
-    )
-    fig.show(renderer="browser")
-    fig.write_image(
-        "./manuscripts/figs/scatter_income_volume.png", engine="orca",
-        width=465, height=450, scale=3.125
-    )
+
+def scatter_income_service_volumn(incidents, closing_info, plot='scatter'):
+    stations = merge_income_service_volumn_status(incidents, closing_info)
+
+    if plot == 'scatter':
+        fig_scatter = px.scatter(
+            stations, x='demographic_value', y='count', color='status',
+            color_discrete_map={'Available': '#808080', 'Unavailable': '#75238C',},
+            trendline="ols", trendline_scope="overall"
+        )
+        fig_scatter.update_layout(
+            xaxis=dict(
+                title='Average household income of area served (USD)',
+                showline=True,
+                linewidth=2,
+                linecolor='black',
+                showgrid=False,
+                ticks='outside',
+                tickformat=',',
+                zeroline=False,
+            ),
+            yaxis=dict(
+                title='Service count',
+                showline=True,
+                linewidth=2,
+                linecolor='black',
+                showgrid=False,
+                ticks='outside',
+                tickformat=',',
+                zeroline=False,
+            ),
+            font=dict(family="Arial", size=18, color="black"),
+            width=850 * 0.65, height=225,
+            legend=dict(
+                x=0.9, y=1, xanchor="center", yanchor="top", title_text=None,
+                bordercolor='#808080', borderwidth=1.5,
+            ),
+            plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+            margin=dict(l=50, r=50, t=50, b=50)
+        )
+        fig_scatter.update_traces(
+            selector=dict(mode='lines'), showlegend=False,
+            line=dict(color='#808080', dash='dash', width=1)
+        )
+        fig_scatter.update_traces(
+            selector=dict(mode='markers'),
+            marker=dict(size=10)
+        )
+        fig_scatter.show(renderer="browser")
+        fig_scatter.write_image(
+            "./manuscripts/figs/scatter_income_volume.png", engine="orca",
+            width=850 * 0.65, height=225,
+            scale=3.125
+        )
+
+    elif plot == 'dist':
+        import plotly.figure_factory as ff
+        fig_dist = ff.create_distplot(
+            [
+                stations[stations['status'] == 'Available']['demographic_value'].tolist(),
+                stations[stations['status'] == 'Unavailable']['demographic_value'].tolist()
+            ],
+            ['Available', 'Unavailable'],
+            show_hist=False, show_rug=False,
+            colors=['#808080', '#75238C']
+        )
+        fig_dist.update_layout(
+            xaxis=dict(
+                title=' ',
+                showline=True,
+                linewidth=2,
+                linecolor='black',
+                showgrid=False,
+                ticks='outside',
+                tickformat='~s',
+                zeroline=False,
+            ),
+            yaxis=dict(
+                title='Probability',
+                showline=True,
+                linewidth=2,
+                linecolor='black',
+                showgrid=False,
+                ticks='outside',
+                zeroline=False,
+                exponentformat="e",
+            ),
+            font=dict(family="Arial", size=18, color="black"),
+            legend=dict(
+                x=0.8, y=1.1, xanchor="center", yanchor="top", title_text=None,
+                font=dict(size=16),
+            ),
+            plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+            width=850 * 0.35, height=225,
+            margin=dict(l=50, r=50, t=50, b=50)
+        )
+        fig_dist.show(renderer="browser")
+        fig_dist.write_image(
+            "./manuscripts/figs/dist_station_income.png", engine="orca",
+            width=850 * 0.35, height=225,
+            scale=3.125
+        )
+
+    else:
+        raise ValueError('plot could be "scatter" or "dist"')
+
     return
 
 
@@ -1001,7 +1061,7 @@ def scatter_inundation_severity_vs_income(df):
     )
     fig.update_layout(
         xaxis=dict(
-            title='Median household income (USD)<br>',
+            title='Median household income (USD)',
             showline=True,
             linewidth=2,
             linecolor='black',
@@ -1011,7 +1071,7 @@ def scatter_inundation_severity_vs_income(df):
             zeroline=False,
         ),
         yaxis=dict(
-            title='Road inundation severity',
+            title='Road inundation<br>severity',
             showline=True,
             linewidth=2,
             linecolor='black',
@@ -1026,7 +1086,8 @@ def scatter_inundation_severity_vs_income(df):
             bordercolor='#808080', borderwidth=1.5,
         ),
         plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
-        width=465, height=450,
+        # width=465, height=450,
+        width=850, height=275,
         margin=dict(l=50, r=50, t=50, b=50)
     )
     fig.update_traces(
@@ -1040,7 +1101,7 @@ def scatter_inundation_severity_vs_income(df):
     fig.show(renderer="browser")
     fig.write_image(
         "./manuscripts/figs/scatter_income_severity.png", engine="orca",
-        width=465, height=450, scale=3.125
+        width=850, height=275, scale=3.125
     )
     return
 
@@ -1056,7 +1117,7 @@ def scatter_income_vs_congestion(df_list):
     )
     fig.update_layout(
         xaxis=dict(
-            title='Median household income (USD)',
+            title='Median household<br>income (USD)',
             showline=True,
             linewidth=2,
             linecolor='black',
@@ -1077,16 +1138,164 @@ def scatter_income_vs_congestion(df_list):
         ),
         font=dict(family="Arial", size=18, color="black"),
         legend=dict(
-            x=0.75, y=1, xanchor="center", yanchor="top", title_text=None,
-            bordercolor='#808080', borderwidth=1.5, font=dict(size=16)
+            x=0.8, y=1, xanchor="center", yanchor="top", title_text=None,
+            bordercolor='#808080', borderwidth=1.5, font=dict(size=16),
         ),
         plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
-        width=465, height=450,
+        width=375, height=450,
         margin=dict(l=50, r=50, t=50, b=50)
     )
     fig.show(renderer="browser")
     fig.write_image(
         f"./manuscripts/figs/scatter_income_congestion.png", engine="orca",
-        width=465, height=450, scale=3.125
+        width=375, height=450, scale=3.125
+    )
+    return
+
+
+def bar_per_non_nearest(per_1, per_2):
+    fig = go.Figure(data=[
+        go.Bar(
+            name='Not nearest', x=['Non-flooding', 'Flooding'], y=[per_1, per_2],
+            marker=dict(color='#42BCB2'),
+            text=[f'{per_1 * 100:.2f}%', f'{per_2 * 100:.2f}%'], textposition='outside',
+            textfont=dict(color='white')
+        ),
+        go.Bar(
+            name='Nearest', x=['Non-flooding', 'Flooding'], y=[1 - per_1, 1 - per_2],
+            marker=dict(color='#235689'),
+            text=[f'{(1 - per_1) * 100:.2f}%', f'{(1 - per_2) * 100:.2f}%'], textposition='inside',
+            insidetextanchor='start',
+            textfont=dict(color='white')
+        )
+    ])
+    fig.update_layout(
+        barmode='stack',
+        xaxis=dict(
+            showline=True, linewidth=2, linecolor='black', showgrid=False,
+            ticks='outside', tickformat=',', zeroline=False,
+        ),
+        yaxis=dict(
+            tickvals=[0, 1], ticktext=['0%', '100%'],
+            showline=True, linewidth=2, linecolor='black', showgrid=False,
+            ticks='outside', tickformat=',', zeroline=False,
+        ),
+        font=dict(family="Arial", size=18, color="black"),
+        legend=dict(font=dict(size=16), orientation="h", yanchor="bottom", xanchor="center", y=1.05, x=0.5,),
+        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+        width=450, height=450,
+        margin=dict(l=50, r=50, t=50, b=50)
+    )
+    fig.show(renderer="browser")
+    fig.write_image(
+        f"./manuscripts/figs/bar_percent_nearest.png", engine="orca",
+        width=450, height=450, scale=3.125
+    )
+    return
+
+def bar_per_nearest_reason(icd_n, icd_f):
+    icd_n = icd_n.dropna(subset=['if_nearest_occupied', 'if_nearest_closed'])
+    icd_f = icd_f.dropna(subset=['if_nearest_occupied', 'if_nearest_closed'])
+    per_n = [
+        ((icd_n['if_nearest_occupied'] == False) & (icd_n['if_nearest_closed'] == False)).mean() * 100,
+        icd_n['if_nearest_occupied'].mean() * 100,
+        icd_n['if_nearest_closed'].mean() * 100
+    ]
+    assert sum(per_n) == 100
+    per_f = [
+        ((icd_f['if_nearest_occupied'] == False) & (icd_f['if_nearest_closed'] == False)).mean() * 100,
+        icd_f['if_nearest_occupied'].mean() * 100,
+        icd_f['if_nearest_closed'].mean() * 100
+    ]
+    assert sum(per_f) == 100
+
+    fig = go.Figure(data=[
+        go.Bar(
+            name='Closure', x=['Non-flooding', 'Flooding'], y=[per_n[2], per_f[2]],
+            marker=dict(color='#197AB7'),
+            text=[f'{per_n[2]:.2f}%', f'{per_f[2]:.2f}%'], textposition='outside',
+            textfont=dict(color='white')
+        ),
+        go.Bar(
+            name='Occupation', x=['Non-flooding', 'Flooding'], y=[per_n[1], per_f[1]],
+            marker=dict(color='#A5CFE3'),
+            text=[f'{per_n[1]:.2f}%', f'{per_f[1]:.2f}%'], textposition='inside',
+            insidetextanchor='start',
+            textfont=dict(color='white')
+        ),
+        go.Bar(
+            name='Others', x=['Non-flooding', 'Flooding'], y=[per_n[0], per_f[0]],
+            marker=dict(color='#CFD4D7'),
+            text=[f'{per_n[0]:.2f}%', f'{per_f[0]:.2f}%'], textposition='outside',
+            textfont=dict(color='black'), cliponaxis=False
+        )
+    ])
+    fig.update_layout(
+        barmode='stack',
+        xaxis=dict(
+            showline=True, linewidth=2, linecolor='black', showgrid=False,
+            ticks='outside', tickformat=',', zeroline=False,
+        ),
+        yaxis=dict(
+            tickvals=[0, 100], ticktext=['0%', '100%'],
+            showline=True, linewidth=2, linecolor='black', showgrid=False,
+            ticks='outside', tickformat=',', zeroline=False,
+        ),
+        font=dict(family="Arial", size=18, color="black"),
+        legend=dict(
+            font=dict(size=16), traceorder="normal",
+            orientation="h", yanchor="bottom", xanchor="center", y=1.05, x=0.5,
+        ),
+        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+        width=450, height=450,
+        margin=dict(l=50, r=50, t=50, b=50)
+    )
+    fig.show(renderer="browser")
+    fig.write_image(
+        f"./manuscripts/figs/bar_percent_nearest_reason.png", engine="orca",
+        width=450, height=450, scale=3.125
+    )
+    return
+
+
+def bar_ave_income_normal_disrupted_icd(
+        income_n_nearest, income_n_not_nearest, income_f_nearest, income_f_not_nearest
+):
+    fig = go.Figure(data=[
+        go.Bar(
+            name='Nearest', x=['Non-flooding', 'Flooding'], y=[income_n_nearest, income_f_nearest],
+            text=[f'{income_n_nearest:.2f}', f'{income_f_nearest:.2f}'], textposition='outside',
+            marker=dict(color='#A5CFE3'),
+        ),
+        go.Bar(
+            name='Not nearest', x=['Non-flooding', 'Flooding'], y=[income_n_not_nearest, income_f_not_nearest],
+            text=[f'{income_n_not_nearest:.2f}', f'{income_f_not_nearest:.2f}'], textposition='outside',
+            marker=dict(color='#235689'),
+        )
+    ])
+    fig.update_layout(
+        barmode='group',
+        xaxis=dict(
+            showline=True, linewidth=2, linecolor='black', showgrid=False,
+            ticks='outside', tickformat=',', zeroline=False,
+        ),
+        yaxis=dict(
+            title='Average household income<br>of incidents (USD)',
+            showline=True, linewidth=2, linecolor='black', showgrid=False,
+            ticks='outside', tickformat=',', zeroline=False,
+        ),
+        font=dict(family="Arial", size=18, color="black"),
+        legend=dict(
+            font=dict(size=16), traceorder="normal",
+            orientation="h", yanchor="bottom", xanchor="center", y=1.05, x=0.5,
+        ),
+        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+        width=450, height=450,
+        margin=dict(l=50, r=50, t=50, b=50)
+    )
+    fig.show(renderer="browser")
+    fig.write_image(
+        f"./manuscripts/figs/bar_income_normal_disrupted_icd.png", engine="orca",
+        width=450, height=450, scale=3.125
     )
     return
