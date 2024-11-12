@@ -19,7 +19,7 @@ period_split = {
     'Midday_Off-peak': [13, 19],
     'PM_Peak': [19, 22],
     'Midnight_Off-peak': [22, 9],
-}  # NOTE: UTC TIME from EDT !!!  2016-10-09 was in EDT.  Local time  + 4 hours = UTC time.
+}  # NOTE: UTC TIME from EDT !!!  2016-10-09 was in EDT.  Local time + 4 hours = UTC time.
 period_short = ['AM_PK', 'Md_OP', 'PM_PK', 'Nt_OP']
 speed_assigned = {
     'motorway': 55, 'motorway_link': 55, 'trunk': 55, 'trunk_link': 55,

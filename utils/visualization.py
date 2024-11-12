@@ -460,12 +460,12 @@ def map_road_speed(gdf, time_col, label=''):
     px.set_mapbox_access_token(open("./utils/mapboxToken.txt").read())
     gdf = gdf.to_crs('epsg:4326')
 
-    speed_column = gdf['DISTANCE_x'] / gdf[time_col] * 60
+    speed_column = gdf['DISTANCE_shp'] / gdf[time_col] * 60
     speed_column[speed_column <= 1e-1] = 0
     speed_column[speed_column >= 65] = speed_column[(speed_column < 65) & (speed_column > 1e-1)].median()
 
     num_colors = 13
-    null_name = 'Zero speed'
+    null_name = 'Zero or cutoff'
     color_scale = px.colors.sample_colorscale(
         px.colors.diverging.RdYlGn, [i/(num_colors-1) for i in range(num_colors)]
     )
@@ -526,7 +526,6 @@ def map_road_speed(gdf, time_col, label=''):
         width=610,
         height=800,
     )
-    # fig.for_each_trace(lambda trace: trace.update(visible='legendonly') if trace.name == 'Zero speed' else ())
     fig.show(renderer="browser")
     fig.write_image(
         f"./manuscripts/figs/map_traffic{label}.png", engine="orca",
@@ -1106,18 +1105,28 @@ def scatter_inundation_severity_vs_income(df):
     return
 
 
-def scatter_income_vs_congestion(df_list):
+def scatter_income_vs_congestion(df_list_d, df_list_c, mode='disrupted_net', expand=False):
     import pandas as pd
-    df = pd.concat(df_list, axis=0, ignore_index=True)
+    if mode == 'disrupted_net':
+        df = pd.concat(df_list_d, axis=0, ignore_index=True)
+    elif mode == 'complete_net':
+        df = pd.concat(df_list_c, axis=0, ignore_index=True)
+    elif mode == 'diff':
+        df_d = pd.concat(df_list_d, axis=0, ignore_index=True)
+        df_c = pd.concat(df_list_c, axis=0, ignore_index=True)
+        df = df_d.copy()
+        df['congestion'] = df_d['congestion'] - df_c['congestion']
+    df['congestion'] = df['congestion'] * 100
 
-    color_list = ['#0FA66E', '#8A9A5B', '#D98A29', '#5FB6D9']
+    color_list = ['#992F87', '#C9A2C6', '#A5CFE3', '#55759E',]
     fig = px.scatter(
         df, x='income', y='congestion', color='period',
-        color_discrete_sequence=color_list
+        color_discrete_sequence=color_list,
+        # trendline='ols',
     )
     fig.update_layout(
         xaxis=dict(
-            title='Median household<br>income (USD)',
+            title='Median household income (USD)',
             showline=True,
             linewidth=2,
             linecolor='black',
@@ -1127,7 +1136,7 @@ def scatter_income_vs_congestion(df_list):
             zeroline=False,
         ),
         yaxis=dict(
-            title='Congestion severity',
+            title='Travel time<br>increase (%)',
             showline=True,
             linewidth=2,
             linecolor='black',
@@ -1135,21 +1144,51 @@ def scatter_income_vs_congestion(df_list):
             ticks='outside',
             tickformat=',',
             zeroline=False,
+            range=[-10, 210]
         ),
         font=dict(family="Arial", size=18, color="black"),
         legend=dict(
-            x=0.8, y=1, xanchor="center", yanchor="top", title_text=None,
-            bordercolor='#808080', borderwidth=1.5, font=dict(size=16),
+            x=0.5, y=1.2, xanchor="center", yanchor="middle", title_text=None,
+            font=dict(size=18), orientation="h", itemwidth=30,
         ),
         plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
-        width=375, height=450,
+        width=600, height=250,
         margin=dict(l=50, r=50, t=50, b=50)
     )
-    fig.show(renderer="browser")
-    fig.write_image(
-        f"./manuscripts/figs/scatter_income_congestion.png", engine="orca",
-        width=375, height=450, scale=3.125
-    )
+    if mode == 'diff':
+        fig.update_layout(yaxis=dict(range=[-100, 200]), width=610, height=250)
+        fig.show(renderer="browser")
+        fig.write_image(
+            f"./manuscripts/figs/scatter_income_congestion_{mode}.png", engine="orca",
+            width=610, height=250, scale=3.125
+        )
+    else:
+        fig.show(renderer="browser")
+        fig.write_image(
+            f"./manuscripts/figs/scatter_income_congestion_{mode}.png", engine="orca",
+            width=600, height=250, scale=3.125
+        )
+
+    if expand:
+        for n in [t.name for t in fig.data]:
+            for trace in fig.data:
+                if trace.name not in [n]:
+                    trace.visible = False
+                else:
+                    trace.visible = True
+            if mode == 'diff':
+                fig.update_layout(yaxis=dict(range=[-100, 200]), width=610,)
+                fig.show(renderer="browser")
+                fig.write_image(
+                    f"./manuscripts/figs/scatter_income_congestion_{mode}_{n}.png", engine="orca",
+                    width=610, scale=3.125
+                )
+            else:
+                fig.show(renderer="browser")
+                fig.write_image(
+                    f"./manuscripts/figs/scatter_income_congestion_{mode}_{n}.png", engine="orca",
+                    width=600, height=250, scale=3.125
+                )
     return
 
 
@@ -1299,3 +1338,259 @@ def bar_ave_income_normal_disrupted_icd(
         width=450, height=450, scale=3.125
     )
     return
+
+
+def line_hotspot_ave_time(t_by_h, t_std_by_h, t_min_by_h, loc):
+    from plotly.subplots import make_subplots
+    fig = make_subplots(rows=2, cols=1, )
+    fig.add_trace(
+        go.Scatter(
+            x=list(range(24)), y=t_by_h, mode='lines+markers', name='Average travel time',
+            line=dict(color='#235689',),
+            marker=dict(color='#235689',)
+        ), row=1, col=1,
+    )
+    # fig.add_trace(
+    #     go.Scatter(x=list(range(24)), y=t_std_by_h, mode='lines+markers', name='Standard deviation'), row=2, col=1
+    # )
+    fig.add_shape(
+        type="line", x0=0, x1=23, y0=min(t_by_h), y1=min(t_by_h),
+        line=dict(color="grey", width=1, dash="dash"), xref="x1", yref="y1"
+    )
+    fig.add_annotation(
+        x=23, y=min(t_by_h), text=f"{min(t_by_h):.1f}s", showarrow=False, xref="x1", yref="y1",
+        xanchor="left", font=dict(color="grey", size=14)
+    )
+    fig.add_shape(
+        type="line", x0=0, x1=23, y0=max(t_by_h), y1=max(t_by_h),
+        line=dict(color="grey", width=1, dash="dash"), xref="x1", yref="y1"
+    )
+    fig.add_annotation(
+        x=23, y=max(t_by_h), text=f"{max(t_by_h):.1f}s", showarrow=False, xref="x1", yref="y1",
+        xanchor="left", font=dict(color="grey", size=14)
+    )
+    fig.update_layout(
+        xaxis=dict(
+            title='Hours in day',
+            showline=True, linewidth=2, linecolor='black', showgrid=False,
+            ticks='outside', tickformat=',', zeroline=False,
+            tickmode='array', tickvals=[0] + list(range(1, 24, 2)),
+        ),
+        yaxis=dict(
+            title='Average travel<br>time (s)',
+            showline=True, linewidth=2, linecolor='black', showgrid=False,
+            ticks='outside', tickformat=',', zeroline=False,
+        ),
+        # xaxis2=dict(
+        #     title='Hours in day',
+        #     showline=True, linewidth=2, linecolor='black', showgrid=False,
+        #     ticks='outside', tickformat=',', zeroline=False,
+        # ),
+        # yaxis2=dict(
+        #     title='Seconds',
+        #     showline=True, linewidth=2, linecolor='black', showgrid=False,
+        #     ticks='outside', tickformat=',', zeroline=False,
+        # ),
+        font=dict(family="Arial", size=18, color="black"),
+        legend=dict(
+            font=dict(size=16), traceorder="normal",
+            orientation="h", yanchor="bottom", xanchor="center", y=1.05, x=0.5,
+        ),
+        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+        width=600, height=400,
+        margin=dict(l=50, r=50, t=50, b=50)
+    )
+    fig.show(renderer="browser")
+    fig.write_image(
+        f"./manuscripts/figs/line_ave_travel_time_hour.png", engine="orca",
+        width=600, height=400, scale=3.125
+    )
+    return
+
+
+def scatter_inundation_severity_vs_congestion(
+        inundation, congestion_container, block_group, spatial_lag=False, expand=False
+):
+    import pandas as pd
+    congestion = congestion_container[0] - congestion_container[1]
+    congestion['income'] = congestion_container[0]['income']
+    congestion = congestion[~congestion.isna().any(axis=1)]
+    inundation = inundation[~inundation.isna().any(axis=1)]
+
+    congestion_melt = pd.melt(
+        congestion.reset_index(), id_vars=['id', 'income'], value_vars=['AM_PK', 'Md_OP', 'PM_PK', 'Nt_OP'],
+        var_name='period', value_name='congestion'
+    )
+    inundation_melt = pd.melt(
+        inundation.reset_index(), id_vars=['id', 'income'], value_vars=['AM_PK', 'Md_OP', 'PM_PK', 'Nt_OP'],
+        var_name='period', value_name='inundation'
+    )
+    combined = congestion_melt.merge(inundation_melt, on=['id', 'period'], how='inner')
+    replacements = [('AM_PK', 'AM Peak'), ('Md_OP', 'Midday'), ('PM_PK', 'PM Peak'), ('Nt_OP', 'Night')]
+    for old, new in replacements:
+        combined['period'] = combined['period'].str.replace(old, new)
+    x_name = 'inundation'
+
+    if spatial_lag:
+        from pysal.lib import weights
+        import geopandas as gpd
+        combined_w_bg = gpd.GeoDataFrame(combined[combined['period'] == combined['period'].unique()[0]].merge(
+            block_group[['geometry', 'id']], on='id', how='left'
+        ), geometry='geometry').dissolve(by='id').reset_index()
+        m = weights.Queen.from_dataframe(combined_w_bg, use_index=False, silence_warnings=True)
+        m.transform = 'r'
+        adj_m = m.full()[0]
+        lag_col = 'inundation'
+        lag_n = 3
+        for ln in range(lag_n):
+            for p in combined['period'].unique():
+                c = combined[combined['period'] == p][lag_col].values
+                for _ in range(ln + 1):
+                    c = adj_m @ c
+                combined.loc[combined['period'] == p, f'{lag_col}_l{ln + 1}'] = c
+        combined[f'{lag_col}_all_lag'] = combined[
+            [lag_col] + [f'{lag_col}_l{ln + 1}' for ln in list(range(lag_n))]
+        ].sum(axis=1)
+        x_name = 'inundation_all_lag'
+
+    # vis
+    color_list = ['#992F87', '#C9A2C6', '#A5CFE3', '#55759E',]
+    fig = px.scatter(
+        combined,
+        x=x_name,
+        y='congestion',
+        color='period',
+        trendline="ols",
+        color_discrete_sequence=color_list,
+    )
+    fig.update_layout(
+        xaxis=dict(
+            title='Road inundation severity',
+            showline=True,
+            linewidth=2,
+            linecolor='black',
+            showgrid=False,
+            ticks='outside',
+            tickformat=',',
+            zeroline=False,
+        ),
+        yaxis=dict(
+            title='Travel time<br>increase (%)',
+            showline=True,
+            linewidth=2,
+            linecolor='black',
+            showgrid=False,
+            ticks='outside',
+            tickformat=',',
+            zeroline=False,
+            range=[-1, 2]
+        ),
+        font=dict(family="Arial", size=18, color="black"),
+        legend=dict(
+            x=0.5, y=1.2, xanchor="center", yanchor="middle", title_text=None,
+            font=dict(size=18), orientation="h", itemwidth=30,
+        ),
+        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+        width=600, height=250,
+        margin=dict(l=50, r=50, t=50, b=50)
+    )
+    for trace in fig.data:
+        if trace.mode == 'lines':
+            trace.visible = False
+    fig.show(renderer="browser")
+    fig.write_image(
+        f"./manuscripts/figs/scatter_congestion_inundation.png", engine="orca",
+        width=600, height=250, scale=3.125
+    )
+    for trace in fig.data:
+        if trace.mode == 'lines':
+            trace.visible = True
+    if expand:
+        for n in [t.name for t in fig.data]:
+            for trace in fig.data:
+                if trace.name not in [n]:
+                    trace.visible = False
+                else:
+                    trace.visible = True
+            fig.show(renderer="browser")
+            fig.write_image(
+                f"./manuscripts/figs/scatter_congestion_inundation_{n}.png", engine="orca",
+                width=600, height=250, scale=3.125
+            )
+    return
+
+
+def map_inundation_severity_and_congestion(inundation, congestion, block_group):
+    import geopandas as gpd
+    block_group_vb = block_group[block_group['COUNTYFP'] == '810']
+    block_group_vb = block_group_vb[~block_group_vb['id'].isin(['8109901000', '8100418024'])]
+    inundation_w_geo = inundation.copy()
+    inundation_w_geo = inundation_w_geo.reset_index().merge(block_group_vb[['geometry', 'id']], on='id')
+    inundation_w_geo = gpd.GeoDataFrame(inundation_w_geo, geometry='geometry')
+    congestion_w_geo = congestion.copy()
+    congestion_w_geo = congestion_w_geo.reset_index().merge(block_group_vb[['geometry', 'id']], on='id')
+    congestion_w_geo = gpd.GeoDataFrame(congestion_w_geo, geometry='geometry')
+    assert (inundation_w_geo.columns == congestion_w_geo.columns).all(), 'Columns name inconsistent.'
+
+    def plot(gdf, value_col, value_name, save_label, color_scheme="Viridis",):
+        import json
+        px.set_mapbox_access_token(open("./utils/mapboxToken.txt").read())
+        fig = px.choropleth(
+            gdf,
+            geojson=json.loads(gdf.to_json()),
+            locations=gdf.index,
+            color=value_col,
+            color_continuous_scale=color_scheme,
+            projection="mercator",
+            range_color=[0, 1]
+        )
+        fig.update_geos(
+            center=dict(
+                lat=(gdf.total_bounds[1] + gdf.total_bounds[3]) / 2,
+                lon=(gdf.total_bounds[0] + gdf.total_bounds[2]) / 2
+            ),
+            lataxis=dict(range=[gdf.total_bounds[1] - 0.01, gdf.total_bounds[3] + 0.01]),
+            lonaxis=dict(range=[gdf.total_bounds[0] - 0.01, gdf.total_bounds[2] + 0.01]),
+            visible=False
+        )
+        fig.update_traces(
+            marker_line_color="#36454F",
+            marker_line_width=0.75,
+        )
+        fig.update_coloraxes(
+            colorbar=dict(
+                len=0.5,
+                title=dict(text=value_name, font=dict(size=18)),
+                outlinecolor='black',
+                outlinewidth=0.5,
+                tickfont=dict(size=14),
+                x=0.82, xanchor="left",
+                y=0.97, yanchor="top",
+            ),
+        )
+        fig.update_layout(
+            font=dict(family="Arial", color="Black"),
+            autosize=False,
+            width=600,
+            height=600,
+            margin=dict(l=0, r=0, t=0, b=0),
+        )
+        fig.show(renderer="browser")
+        fig.write_image(
+            f"./manuscripts/figs/map_block_group_{save_label}_{value_col}.png", engine="orca",
+            width=600, height=600, scale=3.125
+        )
+
+    for p in ['AM_PK', 'Md_OP', 'PM_PK', 'Nt_OP']:
+        plot(
+            inundation_w_geo, p, 'Road inundation<br>severity',
+            'inundation'
+        )
+        plot(
+            congestion_w_geo, p, 'Travel time<br>increase',
+            'congestion',"Cividis"
+        )
+    return
+
+
+
