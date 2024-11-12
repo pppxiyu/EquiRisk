@@ -170,7 +170,7 @@ def convert_feature_class_to_df(incident, feature_class_addr, label_list, mode_l
             continue
 
         arr = arcpy.da.FeatureClassToNumPyArray(
-            f'{feature_class_addr}_{l}{mode_label}', ('Name', 'Total_Seconds')
+            f'{feature_class_addr}_{l}{mode_label}', ('Name', 'Total_Seconds', 'Total_Miles')
         )
         df = pd.DataFrame(arr)
         df['rescue_name'] = df['Name'].str.split('-').str[0]
@@ -178,7 +178,7 @@ def convert_feature_class_to_df(incident, feature_class_addr, label_list, mode_l
         df_list.append(df)
 
     df = pd.concat(df_list, axis=0)
-    incident = incident.merge(df[['incident_id', 'Total_Seconds']], how='left', on='incident_id')
+    incident = incident.merge(df[['incident_id', 'Total_Seconds', 'Total_Miles']], how='left', on='incident_id')
 
     return incident
 
@@ -371,4 +371,61 @@ def save_ict_to_shp(gdf_i, dir_save, time_range_dict=None, to_arcgis=False, gdb_
         )
 
     return
+
+
+def create_grid(gdf, n_rows=10, n_cols=10):
+    from shapely.geometry import box
+    xmin, ymin, xmax, ymax = gdf.total_bounds
+    cell_width = (xmax - xmin) / n_cols
+    cell_height = (ymax - ymin) / n_rows
+
+    grid_cells = []
+    for i in range(n_cols):
+        for j in range(n_rows):
+            x1 = xmin + i * cell_width
+            y1 = ymin + j * cell_height
+            x2 = x1 + cell_width
+            y2 = y1 + cell_height
+            grid_cells.append({
+                "geometry": box(x1, y1, x2, y2),
+                "label": f"{i + 1}-{j + 1}"  # Assign label as "col-row"
+            })
+    grid = gpd.GeoDataFrame(grid_cells, crs=gdf.crs)
+    return grid
+
+
+def get_hotspots_ave_time(icd):
+    icd['Call Date and Time'] = icd['Call Date and Time'].dt.tz_convert('America/New_York')
+    icd['local_hour'] = icd['Call Date and Time'].dt.hour
+    hotspots = icd['IncidentPoint'].value_counts()
+
+    t_by_h = []
+    t_min_by_h = []
+    t_std_by_h = []
+    loc = []
+    for h in hotspots[hotspots >= 24].index:
+        origins = icd[icd['IncidentPoint'] == h]['Rescue Squad Number'].value_counts()
+        incidents_select = icd[
+            (icd['IncidentPoint'] == h) & (icd['Rescue Squad Number'] == origins.idxmax())
+            ]
+        time_h = incidents_select.groupby('local_hour')['TravelTime'].mean()
+        if len(time_h) == 24:
+            loc.append(h)
+            t_by_h.append(time_h.to_list())
+            t_min_by_h.append(
+                incidents_select.groupby('local_hour')['Total_Seconds'].mean().to_list()
+            )
+            t_std_by_h.append(
+                incidents_select.groupby('local_hour')['TravelTime'].std().to_list()
+            )
+    time_by_hour = [sum(values) / len(values) for values in zip(*t_by_h)]
+    time_min_by_hour = [sum(values) / len(values) for values in zip(*t_min_by_h)]
+    assert all(element == time_min_by_hour[0] for element in time_min_by_hour)
+    import numpy as np
+    time_std_by_hour = np.array(t_std_by_h)
+    time_std_by_hour = np.nan_to_num(time_std_by_hour, nan=0) ** 2
+    time_std_by_hour = np.sum(time_std_by_hour, axis=0)
+    time_std_by_hour = np.sqrt(time_std_by_hour)
+    return time_by_hour, time_std_by_hour, time_min_by_hour, loc
+
 

@@ -442,7 +442,7 @@ def merge_road_info_VDOT(dir_shape, dir_info):
     road_shp = gpd.read_file(dir_shape)
     road_info = Dbf5(dir_info).to_dataframe()
     road_info = road_info[road_info['COUNTY'] == 5]  # keep records for VB
-    road_shp = road_shp.merge(road_info, on=['A', 'B'], how='inner')
+    road_shp = road_shp.merge(road_info, on=['A', 'B'], how='inner', suffixes=('_shp', '_full_net'))
     road_shp = gpd.GeoDataFrame(road_shp, geometry=road_shp['geometry'])
     return road_shp
 
@@ -622,19 +622,25 @@ def add_geo_unit(roads, dir_unit, id_col_geo):
     unit_geo = gpd.read_file(dir_unit)
     unit_geo = unit_geo[id_col_geo + ['geometry']]
     unit_geo = unit_geo.to_crs(roads.crs)
-    incidents = roads.sjoin(unit_geo, how='left')
-    return incidents
+    roads_updated = roads.sjoin(unit_geo, how='left')
+    return roads_updated
 
 
 def merge_roads_demographic_bg(roads, demographic):
+    roads['id'] = roads['COUNTYFP'] + roads['TRACTCE'] + roads['BLKGRPCE']
+    assert (roads['COUNTYFP'].value_counts().iloc[0] / roads['COUNTYFP'].value_counts().sum()) > 0.99, \
+        'One county must be dominating.'
     demographic['tract_name_adapt'] = '0' + (demographic['tract_name'].astype(float) * 100).astype(int).astype(str)
-    demographic['id'] = demographic['tract_name_adapt'] + demographic['block_group_name']
-    roads['id'] = roads['TRACTCE'] + roads['BLKGRPCE']
+    demographic['id'] = (
+            roads['COUNTYFP'].value_counts().index[0]
+            + demographic['tract_name_adapt']
+            + demographic['block_group_name']
+    )
     roads = roads.merge(demographic, how='left', on='id')
     return roads
 
 
-def calculate_severity_metric(group, cutoff_thr, depth_unit, depth_cols):
+def calculate_severity_metric(group, cutoff_thr, depth_unit, depth_cols,):
     group['ave_max_depth'] = group[depth_cols].mean(axis=1)
     max_severity = (group['length'] * cutoff_thr).sum()
     if depth_unit == 'cm':
@@ -648,16 +654,77 @@ def calculate_severity_metric(group, cutoff_thr, depth_unit, depth_cols):
     return metric, income
 
 
-def calculate_congestion_metric(group, ff_time, congestion_time):
+def calculate_severity_metric_by_period(group, cutoff_thr, depth_unit, depth_cols, period_split, period_dict):
+    def if_in_period(hour):
+        if start < end:
+            if start <= hour < end:
+                return True
+        else:
+            if hour >= start or hour < end:
+                return True
+        return False
+
+    metric_list = []
+    for period, (start, end) in period_split.items():
+        depth_cols_updated = [
+            i for i in depth_cols if if_in_period(
+                int(i.split("_")[-1]) - list(period_dict.values())[0]
+            )
+        ]
+        group_cols = group[depth_cols_updated]
+        group_cols = group_cols.fillna(0)
+        group['ave_max_depth'] = group_cols.mean(axis=1)
+        max_severity = (group['length'] * cutoff_thr).sum()
+        if depth_unit == 'cm':
+            severity = (group['length'] * group['ave_max_depth']).sum()
+        elif depth_unit == 'ft':
+            severity = (group['length'] * group['ave_max_depth']*30.48).sum()
+        else:
+            raise ValueError('Specify unit.')
+        metric = severity / max_severity
+        metric_list.append(metric)
+    return metric_list, group['demographic_value'].mean()
+
+
+def calculate_congestion_metric(group, ff_time, congestion_time, manually_cut=10):
     group = group[group[ff_time] > 1e-3]
     group = group[group[congestion_time] > 1e-3]
-    group['ff_speed'] = 1 / group[ff_time]
-    group['congestion_speed'] = 1 / group[congestion_time]
-
-    group['length'] = group.geometry.length
-    group['length_weights'] = group['length'] / group['length'].sum()
-
-    metric = 1 - ((group['congestion_speed'] / group['ff_speed']) * group['length_weights']).sum()
+    group = group[group['LENGTH_full_net'] != 0]  # remove error
+    group = group[group[ff_time] < manually_cut]  # remove roads that are cut off
+    if len(group) == 0:
+        return None, None
+    metric = (group[congestion_time] - group[ff_time]).sum() / group[ff_time].sum()
     income = group['demographic_value'].mean()
     return metric, income
+
+
+def get_congestion_metrics(dir_road, period_short, dir_road_cube6, dir_bg_boundaries, dir_income_bg):
+    import pandas as pd
+    import os
+    from utils.preprocess_incidents import import_demographic
+    metrics_df_list = []
+    for l, n in zip(
+            period_short, ['AM Peak', 'Midday', 'PM Peak', 'Night']
+    ):
+        if os.path.exists(f'{dir_road}_{l}/{l}_FDBKNET_LINK.dbf'):
+            road_segment = merge_road_info_VDOT(
+                dir_road_cube6, f'{dir_road}_{l}/{l}_FDBKNET_LINK.dbf'
+            )
+            road_segment = add_geo_unit(road_segment, dir_bg_boundaries, ['COUNTYFP', 'TRACTCE', 'BLKGRPCE'])
+            road_segment = merge_roads_demographic_bg(
+                road_segment, import_demographic(dir_income_bg, ['B19013_001E'], ['9901'])
+            )
+            road_segment = road_segment[~road_segment['demographic_value'].isna()].fillna(0)
+            congestion_metrics = road_segment.groupby('id').apply(
+                lambda group: calculate_congestion_metric(group, 'FFTIME', 'TIME_1')
+            )
+            congestion_metrics_df = pd.DataFrame(
+                congestion_metrics.tolist(), columns=['congestion', 'income'], index=congestion_metrics.index
+            )
+            congestion_metrics_df['period'] = [n] * len(congestion_metrics_df)
+            metrics_df_list.append(congestion_metrics_df)
+        else:
+            raise ValueError('File missing.')
+
+    return metrics_df_list
 
