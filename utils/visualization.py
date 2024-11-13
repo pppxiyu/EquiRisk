@@ -1520,19 +1520,31 @@ def scatter_inundation_severity_vs_congestion(
     return
 
 
-def map_inundation_severity_and_congestion(inundation, congestion, block_group):
+def map_inundation_severity_and_congestion(inundation, congestion_list, block_group):
     import geopandas as gpd
     block_group_vb = block_group[block_group['COUNTYFP'] == '810']
     block_group_vb = block_group_vb[~block_group_vb['id'].isin(['8109901000', '8100418024'])]
     inundation_w_geo = inundation.copy()
     inundation_w_geo = inundation_w_geo.reset_index().merge(block_group_vb[['geometry', 'id']], on='id')
     inundation_w_geo = gpd.GeoDataFrame(inundation_w_geo, geometry='geometry')
-    congestion_w_geo = congestion.copy()
-    congestion_w_geo = congestion_w_geo.reset_index().merge(block_group_vb[['geometry', 'id']], on='id')
-    congestion_w_geo = gpd.GeoDataFrame(congestion_w_geo, geometry='geometry')
-    assert (inundation_w_geo.columns == congestion_w_geo.columns).all(), 'Columns name inconsistent.'
 
-    def plot(gdf, value_col, value_name, save_label, color_scheme="Viridis",):
+    congestion_d = congestion_list[0]
+    congestion_w_geo_d = congestion_d.copy()
+    congestion_w_geo_d = congestion_w_geo_d.reset_index().merge(block_group_vb[['geometry', 'id']], on='id')
+    congestion_w_geo_d = gpd.GeoDataFrame(congestion_w_geo_d, geometry='geometry')
+    assert (inundation_w_geo.columns == congestion_w_geo_d.columns).all(), 'Columns name inconsistent.'
+
+    congestion_c = congestion_list[1]
+    congestion_w_geo_c = congestion_c.copy()
+    congestion_w_geo_c = congestion_w_geo_c.reset_index().merge(block_group_vb[['geometry', 'id']], on='id')
+    congestion_w_geo_c = gpd.GeoDataFrame(congestion_w_geo_c, geometry='geometry')
+    congestion_w_geo_change = congestion_w_geo_d.copy()
+    congestion_w_geo_change[['AM_PK', 'Md_OP', 'PM_PK', 'Nt_OP']] = (
+            congestion_w_geo_d[['AM_PK', 'Md_OP', 'PM_PK', 'Nt_OP']] -
+            congestion_w_geo_c[['AM_PK', 'Md_OP', 'PM_PK', 'Nt_OP']]
+    )
+
+    def plot(gdf, value_col, value_name, save_label, color_scheme="Viridis", range_color=[0, 1]):
         import json
         px.set_mapbox_access_token(open("./utils/mapboxToken.txt").read())
         fig = px.choropleth(
@@ -1542,7 +1554,7 @@ def map_inundation_severity_and_congestion(inundation, congestion, block_group):
             color=value_col,
             color_continuous_scale=color_scheme,
             projection="mercator",
-            range_color=[0, 1]
+            range_color=range_color
         )
         fig.update_geos(
             center=dict(
@@ -1582,13 +1594,17 @@ def map_inundation_severity_and_congestion(inundation, congestion, block_group):
         )
 
     for p in ['AM_PK', 'Md_OP', 'PM_PK', 'Nt_OP']:
+        # plot(
+        #     inundation_w_geo, p, 'Road inundation<br>severity',
+        #     'inundation'
+        # )
+        # plot(
+        #     congestion_w_geo_d, p, 'Travel time<br>increase',
+        #     'congestion_d',"Cividis"
+        # )
         plot(
-            inundation_w_geo, p, 'Road inundation<br>severity',
-            'inundation'
-        )
-        plot(
-            congestion_w_geo, p, 'Travel time<br>increase',
-            'congestion',"Cividis"
+            congestion_w_geo_change, p, 'Travel time<br>increase change',
+            'congestion_change',"Electric", range_color=[-0.3, 0.7]
         )
     return
 
