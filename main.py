@@ -463,6 +463,9 @@ if __name__ == "__main__":
     #     pp_s.import_rescue_station(dir_rescue_station_n_nearest_geo),
     #     road_segment, if_do_normal=True, if_do_flood=True,
     # )
+
+    # # travel time increase scatter and dist
+    # vis.scatter_dist_icd_travel_time(pp_i.import_incident(dir_incidents), period_dict, 'scatter')
     # #######
 
     #### Regression analysis 2-5
@@ -687,8 +690,6 @@ if __name__ == "__main__":
     #     [round(x * 0.05, 2) for x in range(2, 11)],
     #     'range',
     # )
-
-    # vis.scatter_dist_icd_travel_time(pp_i.import_incident(dir_incidents), period_dict, 'scatter')
 
     ###### Other data processing: edit the net in CUBE
     # save_inundated_roads_4_sim()
