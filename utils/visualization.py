@@ -1609,4 +1609,26 @@ def map_inundation_severity_and_congestion(inundation, congestion_list, block_gr
     return
 
 
+def calculate_mae(df, col_actual, col_predicted):
+    import numpy as np
+    mae = np.mean(np.abs(df[col_actual] - df[col_predicted]))
+    return mae
+
+
+def calculate_mape(df, col_actual, col_predicted):
+    import numpy as np
+    mape = np.mean(np.abs((df[col_actual] - df[col_predicted]) / df[col_actual])) * 100
+    return mape
+
+
+def calculate_rmse(df, col_actual, col_predicted):
+    import numpy as np
+    rmse = np.sqrt(np.mean((df[col_actual] - df[col_predicted]) ** 2))
+    return rmse
+
+
+def calculate_bias(df, col_actual, col_predicted):
+    import numpy as np
+    bias = np.mean(df[col_predicted] - df[col_actual])
+    return bias
 
