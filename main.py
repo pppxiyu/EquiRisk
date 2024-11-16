@@ -468,7 +468,7 @@ if __name__ == "__main__":
     # vis.scatter_dist_icd_travel_time(pp_i.import_incident(dir_incidents), period_dict, 'scatter')
     # #######
 
-    #### Regression analysis 2-5
+    # ### Regression analysis 2-5
     # _, _, _, geo_units_f_op1, _ = calculate_incidents_metrics(
     #     calculate_incidents_with_gis_travel_time(op=1), demo_label='income',
     # )
@@ -690,6 +690,28 @@ if __name__ == "__main__":
     #     [round(x * 0.05, 2) for x in range(2, 11)],
     #     'range',
     # )
+
+    # # accuracy metrics:
+    # for option in [1, 2, 3, 4, 5]:  # 1-no adaptation, 2-origin; 3-daily traffic; 4-flood congestion; 5-all
+    #     print(f'Analysis for Option {option}.')
+    #     incidents_f, incidents_n, _, _, _ = calculate_incidents_metrics(
+    #         calculate_incidents_with_gis_travel_time(op=option), demo_label='income',
+    #     )
+    #     if option == 1:
+    #         print(
+    #             f"Original method normal time: "
+    #             f"MAE_{vis.calculate_mae(incidents_n, 'TravelTime', 'Total_Seconds'):.2f} "
+    #             f"MAPE_{vis.calculate_mape(incidents_n, 'TravelTime', 'Total_Seconds'):.2f} "
+    #             f"RMSE_{vis.calculate_rmse(incidents_n, 'TravelTime', 'Total_Seconds'):.2f} "
+    #             f"BIAS_{vis.calculate_bias(incidents_n, 'TravelTime', 'Total_Seconds'):.2f} "
+    #         )
+    #     print(
+    #         f"Method option {option} flooding time: "
+    #         f"MAE_{vis.calculate_mae(incidents_f, 'TravelTime', 'Total_Seconds'):.2f} "
+    #         f"MAPE_{vis.calculate_mape(incidents_f, 'TravelTime', 'Total_Seconds'):.2f} "
+    #         f"RMSE_{vis.calculate_rmse(incidents_f, 'TravelTime', 'Total_Seconds'):.2f} "
+    #         f"BIAS_{vis.calculate_bias(incidents_f, 'TravelTime', 'Total_Seconds'):.2f} "
+    #     )
 
     ###### Other data processing: edit the net in CUBE
     # save_inundated_roads_4_sim()
