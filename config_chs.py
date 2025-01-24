@@ -23,7 +23,8 @@ dir_road = './data/CHS/roads/road_segment_chs.geojson'
 dir_road_inundated = 'data/CHS/roads/road_segment_CHS.geojson'
 dir_inaccessible_routes = "..."
 
-dir_incidents = '...'
+dir_incidents_raw = './data/CHS/emerg_service/EMS_Peninsula CFS and Impedances_05132024.csv'
+dir_incidents = './data/CHS/emerg_service/incidents_geocoded.csv'
 dir_incidents_routing_nearest = '...'
 
 # null params

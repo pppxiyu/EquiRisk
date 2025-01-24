@@ -11,3 +11,6 @@ cache/
 gis_analysis/
 PIN/
 .gitignore
+main_chs.py
+config_chs.py
+config_sav.py

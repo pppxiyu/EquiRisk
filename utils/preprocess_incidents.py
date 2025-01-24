@@ -75,6 +75,72 @@ def import_incident(address):
     return data
 
 
+def import_raw_incident_chs(address):
+    df = pd.read_csv(address)
+    df['id'] = range(1, len(df) + 1)
+
+    df = df.drop(columns=['Incident_Number', 'Radio_Name'])
+    df = df[~df.duplicated(subset=df.columns.difference(['id']))]
+
+    df = df.rename(columns={
+        'Response_Date': 'call_time', 'Address2': 'address',
+        'Time_Assigned': 'assign_time', 'Time_Enroute': 'enroute_time',
+        'Time_AtScene': 'on_scene_time', 'Time_Cleared': 'close_time',
+    })
+
+    for c in ['call_time', 'assign_time', 'enroute_time', 'on_scene_time', 'close_time']:
+        df[c] = pd.to_datetime(df[c], format='%m/%d/%Y %H:%M')
+
+    df['address'] = df['address'].str.split(' - ').str[1] + ', CHARLESTON, SC, USA'
+    df = df[['id', 'address'] + [col for col in df.columns if not col in ['address', 'id']]]
+    return df
+
+
+def geocode_incident_chs(inc_dir, save_addr, time_range=None):
+    import os
+    if os.path.exists(save_addr):
+        print('Geocoded file exists.')
+        return None
+
+    print('Geocoding progressing.')
+    import geopy as gpy
+    from geopy.extra.rate_limiter import RateLimiter
+
+    locator = gpy.geocoders.ArcGIS()
+    geocode = RateLimiter(locator.geocode, min_delay_seconds=0.1)
+
+    data = import_raw_incident_chs(inc_dir)
+    if time_range is not None:
+        data = data[(data['call_time'] >= time_range[0]) & (data['call_time'] <= time_range[1])]
+
+    data['coordinate'] = data['address'].copy().apply(geocode).apply(
+        lambda loc: tuple(loc.point) if loc else None
+    )
+    data[['lat', 'lon', 'elevation']] = pd.DataFrame(
+        data['coordinate'].copy().tolist(), index=data.index,
+    )
+    data.to_csv(save_addr, index=False)
+    return
+
+
+def import_incident_chs(address):
+    df = pd.read_csv(address)
+    df = df.drop(columns=['address', 'coordinate', 'elevation'])
+    for c in ['call_time', 'assign_time', 'enroute_time', 'on_scene_time', 'close_time']:
+        df[c] = pd.to_datetime(df[c])
+
+    from shapely.geometry import Point
+    geometry = [Point(xy) for xy in zip(df['lon'], df['lat'])]
+    gdf = gpd.GeoDataFrame(df, geometry=geometry)
+    gdf = gdf.set_crs(epsg=4326)
+
+    from shapely.geometry import box
+    bbox = (-79.98, 32.76, -79.92, 32.84)
+    bbox = box(*bbox)
+    gdf = gdf[gdf.geometry.within(bbox)]
+    return gdf
+
+
 def import_incidents_add_info(dir_incidents, rescue_station, period_dict, routing_nearest=None):
     incidents = import_incident(dir_incidents)
     incidents = add_actual_rescue_station(incidents, rescue_station)
@@ -284,7 +350,7 @@ def merge_geo_unit_geo_bg(geo_unit, dir_bg, target_county_num='810'):
 
 def aggr_incidents_geo(incidents, period_dict, dir_bg_boundaries):
     g_units = incidents[
-        ['id', 'diff_travel', 'demographic_value', 'wellness', 'period_actual']
+        ['id', 'diff_travel', 'demographic_value', 'wellness', 'period_actual', 'TravelTime', 'Total_Seconds']
     ].groupby('id').mean()
 
     g_units = add_period_label(g_units, 'period_actual', period_dict)
