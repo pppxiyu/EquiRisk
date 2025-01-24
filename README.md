@@ -21,7 +21,8 @@ underestimation.
 - pysal (for regression part)
 - plotly (for visualization only)
 ## Run
-Run each part of main_vb.py as needed by analysis.
-Please contact with author 
-([xyp@gatech.edu](mailto:xyp@gatech.edu)) 
-for the dataset.
+Run each part of main_vb.py as needed by analysis. 
+All data used are public dataset. 
+Please refer to paper for dataset details or 
+contact with the author 
+([xyp@gatech.edu](mailto:xyp@gatech.edu)).
