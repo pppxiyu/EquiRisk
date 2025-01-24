@@ -172,7 +172,7 @@ def scatter_demo_vs_error(
         df, xaxis, yaxis='Travel time<br>estimation error (s)',
         reg_line=None, color='#3F6F8C', size=17.5,
         col_demo='demographic_value', col_error='diff_travel',
-        save_label=None, op_label='',
+        save_label=None, op_label='', yrange=[-2000, 1000], target_label='error',
 ):
     xrange = extend_and_round_range([df[col_demo].min(), df[col_demo].max()], extension_percent=0.05)
     fig = px.scatter(
@@ -217,7 +217,7 @@ def scatter_demo_vs_error(
             showgrid=False,
             ticks='outside',
             tickformat=',',
-            range=[-2000, 1000],
+            range=yrange,
             zeroline=False,
         ),
         plot_bgcolor='rgba(0,0,0,0)',
@@ -240,7 +240,7 @@ def scatter_demo_vs_error(
         else:
             p_label = 'n'
         fig.write_image(
-            f"./manuscripts/figs/scatter_demo_vs_error_{save_label}_{p_label}{op_label}.png", engine="orca",
+            f"./manuscripts/figs/scatter_demo_vs_{target_label}_{save_label}_{p_label}{op_label}.png", engine="orca",
             width=570, height=475, scale=3.125
         )
 
