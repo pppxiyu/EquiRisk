@@ -25,7 +25,8 @@ Run each part of main_vb.py as needed by analysis.
 All data used are public dataset. The data folder 
 used in the study is deposited on the author's
 [Google Drive](https://drive.google.com/drive/folders/1mxyiUylxluWH87xTQuYMZmrEDUn3v0rs?usp=sharing) 
-currently and open for public use.
+currently and open for public use. Please organize the data
+folder as indicated by the *config_vb.py*.
 Please contact with the author if you have any 
 question
 ([xyp@gatech.edu](mailto:xyp@gatech.edu)).
