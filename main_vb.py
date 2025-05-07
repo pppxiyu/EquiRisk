@@ -422,6 +422,9 @@ if __name__ == "__main__":
         _, _, _, geo_units_f_op1, geo_units_n_op1 = calculate_incidents_metrics(
             calculate_incidents_with_gis_travel_time(op=1), demo_label=s,
         )
+        _ = reg.reg_spatial_lag(
+            geo_units_n_op1, w_lag=1, method='ML', weight_method='Queen',  # spillover=True
+        )
         reg_model = reg.reg_spatial_lag(
             geo_units_f_op1, w_lag=1, method='ML', weight_method='Queen',  # spillover=True
         )
