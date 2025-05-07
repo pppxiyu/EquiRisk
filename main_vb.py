@@ -400,14 +400,14 @@ def calculate_incidents_metrics(inc, demo_label='income'):
 if __name__ == "__main__":
 
     ########
-    # pull_road_data_osm()
+    pull_road_data_osm()
 
-    # save_inundated_roads()
-    # save_rescue_data()
-    # build_full_graph_arcgis()
+    save_inundated_roads()
+    save_rescue_data()
+    build_full_graph_arcgis()
 
-    # for i in [0, 1, 2, 3, 4, 5]:
-    #     calculate_all_routes(op=i)
+    for i in [0, 1, 2, 3, 4, 5]:
+        calculate_all_routes(op=i)
 
     ###### Results 1
     # inequality analysis
@@ -422,7 +422,7 @@ if __name__ == "__main__":
         _, _, _, geo_units_f_op1, geo_units_n_op1 = calculate_incidents_metrics(
             calculate_incidents_with_gis_travel_time(op=1), demo_label=s,
         )
-        _ = reg.reg_spatial_lag(
+        reg_model_normal = reg.reg_spatial_lag(
             geo_units_n_op1, w_lag=1, method='ML', weight_method='Queen',  # spillover=True
         )
         reg_model = reg.reg_spatial_lag(
