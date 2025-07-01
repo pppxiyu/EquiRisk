@@ -233,16 +233,17 @@ def scatter_demo_vs_error(
     )
     fig = layout(fig)
     fig.update_layout(width=570, height=475)
-    fig.show(renderer="browser")
+    # fig.show(renderer="browser")
+    fig.show(renderer="notebook")
     if save_label is not None:
         if reg_line is not None:
             p_label = 'f'
         else:
             p_label = 'n'
-        fig.write_image(
-            f"./manuscripts/figs/scatter_demo_vs_{target_label}_{save_label}_{p_label}{op_label}.png", engine="orca",
-            width=570, height=475, scale=3.125
-        )
+        # fig.write_image(
+        #     f"./manuscripts/figs/scatter_demo_vs_{target_label}_{save_label}_{p_label}{op_label}.png", engine="orca",
+        #     width=570, height=475, scale=3.125
+        # )
 
 
 def get_geo_bg(dir_bg, target_county_num='810'):
@@ -346,11 +347,10 @@ def map_geo_only(
         margin=dict(l=0, r=0, t=0, b=0)
     )
     fig.show(renderer="browser")
-    fig.write_image(
-        f"./manuscripts/figs/map_demographic_{save_label}.png", engine="orca",
-        width=600, height=600, scale=3.125
-    )
-
+    # fig.write_image(
+    #     f"./manuscripts/figs/map_demographic_{save_label}.png", engine="orca",
+    #     width=600, height=600, scale=3.125
+    # )
 
 
 def map_demographic(gdf, color_col, demo_name):
@@ -527,10 +527,10 @@ def map_road_speed(gdf, time_col, label=''):
         height=800,
     )
     fig.show(renderer="browser")
-    fig.write_image(
-        f"./manuscripts/figs/map_traffic{label}.png", engine="orca",
-        width=610, height=800, scale=3.125
-    )
+    # fig.write_image(
+    #     f"./manuscripts/figs/map_traffic{label}.png", engine="orca",
+    #     width=610, height=800, scale=3.125
+    # )
 
 
 def map_origin_shift(gdf_incidents, gdf_station, mode='nearest'):
@@ -716,10 +716,10 @@ def map_origin_shift(gdf_incidents, gdf_station, mode='nearest'):
         # )
     )
     fig.show(renderer="browser")
-    fig.write_image(
-        f"./manuscripts/figs/map_origin_shift_{mode}.png", engine="orca",
-        width=700, height=650, scale=3.125
-    )
+    # fig.write_image(
+    #     f"./manuscripts/figs/map_origin_shift_{mode}.png", engine="orca",
+    #     width=700, height=650, scale=3.125
+    # )
 
     return
 
@@ -803,10 +803,10 @@ def scatter_dist_icd_travel_time(icd, period, mode='dist'):
             line=dict(color='black', width=1, dash='dash')
         )
         fig.show(renderer="browser")
-        fig.write_image(
-            "./manuscripts/figs/dist_travel_increase.png", engine="orca",
-            width=450, height=450, scale=3.125
-        )
+        # fig.write_image(
+        #     "./manuscripts/figs/dist_travel_increase.png", engine="orca",
+        #     width=450, height=450, scale=3.125
+        # )
     elif mode == 'scatter':
         icd_flood['label'] = ['Flooding'] * len(icd_flood)
         icd_normal['label'] = ['Non-flooding'] * len(icd_normal)
@@ -819,7 +819,7 @@ def scatter_dist_icd_travel_time(icd, period, mode='dist'):
         )
         fig.update_layout(
             xaxis=dict(
-                title='Baseline time',
+                title='Baseline time (seconds)',
                 showline=True,
                 linewidth=2,
                 linecolor='black',
@@ -854,10 +854,10 @@ def scatter_dist_icd_travel_time(icd, period, mode='dist'):
             line=dict(color='black', width=1, dash='dash')
         )
         fig.show(renderer="browser")
-        fig.write_image(
-            "./manuscripts/figs/scatter_travel_increase.png", engine="orca",
-            width=450, height=450, scale=3.125
-        )
+        # fig.write_image(
+        #     "./manuscripts/figs/scatter_travel_increase.png", engine="orca",
+        #     width=450, height=450, scale=3.125
+        # )
     return
 
 
@@ -915,16 +915,12 @@ def bar_wellness(lower, higher):
         width=400, height=400,
         font=dict(size=16)
     )
-    fig.show(renderer="browser")
-    fig.write_image(
-        "./manuscripts/figs/bar_bias.png", engine="orca",
-        width=400, height=400, scale=3.125
-    )
-
-
-def bar_capacity_short(gdf):
-    pass
-    return
+    # fig.show(renderer="browser")
+    fig.show(renderer="notebook")
+    # fig.write_image(
+    #     "./manuscripts/figs/bar_bias.png", engine="orca",
+    #     width=400, height=400, scale=3.125
+    # )
 
 
 def merge_income_service_volumn_status(incidents, closing_info):
@@ -994,11 +990,11 @@ def scatter_income_service_volumn(incidents, closing_info, plot='scatter'):
             marker=dict(size=10)
         )
         fig_scatter.show(renderer="browser")
-        fig_scatter.write_image(
-            "./manuscripts/figs/scatter_income_volume.png", engine="orca",
-            width=850 * 0.65, height=225,
-            scale=3.125
-        )
+        # fig_scatter.write_image(
+        #     "./manuscripts/figs/scatter_income_volume.png", engine="orca",
+        #     width=850 * 0.65, height=225,
+        #     scale=3.125
+        # )
 
     elif plot == 'dist':
         import plotly.figure_factory as ff
@@ -1042,11 +1038,11 @@ def scatter_income_service_volumn(incidents, closing_info, plot='scatter'):
             margin=dict(l=50, r=50, t=50, b=50)
         )
         fig_dist.show(renderer="browser")
-        fig_dist.write_image(
-            "./manuscripts/figs/dist_station_income.png", engine="orca",
-            width=850 * 0.35, height=225,
-            scale=3.125
-        )
+        # fig_dist.write_image(
+        #     "./manuscripts/figs/dist_station_income.png", engine="orca",
+        #     width=850 * 0.35, height=225,
+        #     scale=3.125
+        # )
 
     else:
         raise ValueError('plot could be "scatter" or "dist"')
@@ -1098,10 +1094,10 @@ def scatter_inundation_severity_vs_income(df):
         marker=dict(size=6, color='#777AA6')
     )
     fig.show(renderer="browser")
-    fig.write_image(
-        "./manuscripts/figs/scatter_income_severity.png", engine="orca",
-        width=850, height=275, scale=3.125
-    )
+    # fig.write_image(
+    #     "./manuscripts/figs/scatter_income_severity.png", engine="orca",
+    #     width=850, height=275, scale=3.125
+    # )
     return
 
 
@@ -1158,16 +1154,16 @@ def scatter_income_vs_congestion(df_list_d, df_list_c, mode='disrupted_net', exp
     if mode == 'diff':
         fig.update_layout(yaxis=dict(range=[-100, 200]), width=610, height=250)
         fig.show(renderer="browser")
-        fig.write_image(
-            f"./manuscripts/figs/scatter_income_congestion_{mode}.png", engine="orca",
-            width=610, height=250, scale=3.125
-        )
+        # fig.write_image(
+        #     f"./manuscripts/figs/scatter_income_congestion_{mode}.png", engine="orca",
+        #     width=610, height=250, scale=3.125
+        # )
     else:
         fig.show(renderer="browser")
-        fig.write_image(
-            f"./manuscripts/figs/scatter_income_congestion_{mode}.png", engine="orca",
-            width=600, height=250, scale=3.125
-        )
+        # fig.write_image(
+        #     f"./manuscripts/figs/scatter_income_congestion_{mode}.png", engine="orca",
+        #     width=600, height=250, scale=3.125
+        # )
 
     if expand:
         for n in [t.name for t in fig.data]:
@@ -1179,16 +1175,16 @@ def scatter_income_vs_congestion(df_list_d, df_list_c, mode='disrupted_net', exp
             if mode == 'diff':
                 fig.update_layout(yaxis=dict(range=[-100, 200]), width=610,)
                 fig.show(renderer="browser")
-                fig.write_image(
-                    f"./manuscripts/figs/scatter_income_congestion_{mode}_{n}.png", engine="orca",
-                    width=610, scale=3.125
-                )
+                # fig.write_image(
+                #     f"./manuscripts/figs/scatter_income_congestion_{mode}_{n}.png", engine="orca",
+                #     width=610, scale=3.125
+                # )
             else:
                 fig.show(renderer="browser")
-                fig.write_image(
-                    f"./manuscripts/figs/scatter_income_congestion_{mode}_{n}.png", engine="orca",
-                    width=600, height=250, scale=3.125
-                )
+                # fig.write_image(
+                #     f"./manuscripts/figs/scatter_income_congestion_{mode}_{n}.png", engine="orca",
+                #     width=600, height=250, scale=3.125
+                # )
     return
 
 
@@ -1226,11 +1222,12 @@ def bar_per_non_nearest(per_1, per_2):
         margin=dict(l=50, r=50, t=50, b=50)
     )
     fig.show(renderer="browser")
-    fig.write_image(
-        f"./manuscripts/figs/bar_percent_nearest.png", engine="orca",
-        width=450, height=450, scale=3.125
-    )
+    # fig.write_image(
+    #     f"./manuscripts/figs/bar_percent_nearest.png", engine="orca",
+    #     width=450, height=450, scale=3.125
+    # )
     return
+
 
 def bar_per_nearest_reason(icd_n, icd_f):
     icd_n = icd_n.dropna(subset=['if_nearest_occupied', 'if_nearest_closed'])
@@ -1290,10 +1287,10 @@ def bar_per_nearest_reason(icd_n, icd_f):
         margin=dict(l=50, r=50, t=50, b=50)
     )
     fig.show(renderer="browser")
-    fig.write_image(
-        f"./manuscripts/figs/bar_percent_nearest_reason.png", engine="orca",
-        width=450, height=450, scale=3.125
-    )
+    # fig.write_image(
+    #     f"./manuscripts/figs/bar_percent_nearest_reason.png", engine="orca",
+    #     width=450, height=450, scale=3.125
+    # )
     return
 
 
@@ -1333,10 +1330,10 @@ def bar_ave_income_normal_disrupted_icd(
         margin=dict(l=50, r=50, t=50, b=50)
     )
     fig.show(renderer="browser")
-    fig.write_image(
-        f"./manuscripts/figs/bar_income_normal_disrupted_icd.png", engine="orca",
-        width=450, height=450, scale=3.125
-    )
+    # fig.write_image(
+    #     f"./manuscripts/figs/bar_income_normal_disrupted_icd.png", engine="orca",
+    #     width=450, height=450, scale=3.125
+    # )
     return
 
 
@@ -1401,10 +1398,10 @@ def line_hotspot_ave_time(t_by_h, t_std_by_h, t_min_by_h, loc):
         margin=dict(l=50, r=50, t=50, b=50)
     )
     fig.show(renderer="browser")
-    fig.write_image(
-        f"./manuscripts/figs/line_ave_travel_time_hour.png", engine="orca",
-        width=600, height=400, scale=3.125
-    )
+    # fig.write_image(
+    #     f"./manuscripts/figs/line_ave_travel_time_hour.png", engine="orca",
+    #     width=600, height=400, scale=3.125
+    # )
     return
 
 
@@ -1498,10 +1495,10 @@ def scatter_inundation_severity_vs_congestion(
         if trace.mode == 'lines':
             trace.visible = False
     fig.show(renderer="browser")
-    fig.write_image(
-        f"./manuscripts/figs/scatter_congestion_inundation.png", engine="orca",
-        width=600, height=250, scale=3.125
-    )
+    # fig.write_image(
+    #     f"./manuscripts/figs/scatter_congestion_inundation.png", engine="orca",
+    #     width=600, height=250, scale=3.125
+    # )
     for trace in fig.data:
         if trace.mode == 'lines':
             trace.visible = True
@@ -1513,10 +1510,10 @@ def scatter_inundation_severity_vs_congestion(
                 else:
                     trace.visible = True
             fig.show(renderer="browser")
-            fig.write_image(
-                f"./manuscripts/figs/scatter_congestion_inundation_{n}.png", engine="orca",
-                width=600, height=250, scale=3.125
-            )
+            # fig.write_image(
+            #     f"./manuscripts/figs/scatter_congestion_inundation_{n}.png", engine="orca",
+            #     width=600, height=250, scale=3.125
+            # )
     return
 
 
@@ -1588,10 +1585,10 @@ def map_inundation_severity_and_congestion(inundation, congestion_list, block_gr
             margin=dict(l=0, r=0, t=0, b=0),
         )
         fig.show(renderer="browser")
-        fig.write_image(
-            f"./manuscripts/figs/map_block_group_{save_label}_{value_col}.png", engine="orca",
-            width=600, height=600, scale=3.125
-        )
+        # fig.write_image(
+        #     f"./manuscripts/figs/map_block_group_{save_label}_{value_col}.png", engine="orca",
+        #     width=600, height=600, scale=3.125
+        # )
 
     for p in ['AM_PK', 'Md_OP', 'PM_PK', 'Nt_OP']:
         # plot(

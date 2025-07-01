@@ -17,6 +17,7 @@ underestimation.
 - geopandas
 - arcpy (requires access to ArcGIS Pro)
 - networkx
+- osmnx (for pulling road data)
 - rasterio (for processing flood map only)
 - pysal (for regression part)
 - plotly (for visualization only)

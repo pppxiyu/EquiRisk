@@ -10,6 +10,9 @@ legacy/
 cache/
 gis_analysis/
 PIN/
+flood_sim/
+flood_sim_1/
+pending/
 .gitignore
 pending/main_chs.py
 pending/config_chs.py

@@ -35,7 +35,11 @@ def geocode_incident(data_addr, time_range, save_addr):
     return
 
 
-def import_incident(address):
+def import_incident(address: str):
+    """
+    :param address: the address of geocoded and ready-to-use incident data
+    :return: processed data in GeoDataFrame format
+    """
     from shapely.geometry import box
 
     data = pd.read_csv(address)
@@ -64,7 +68,9 @@ def import_incident(address):
         data['IncidentPoint'] = gpd.GeoSeries(gpd.points_from_xy(
             y=data['IncidentLat'], x=data['IncidentLon'],
         ), index=data.index, crs="EPSG:4326")
-        data = gpd.GeoDataFrame(data, geometry=data['IncidentPoint'])
+        data = gpd.GeoDataFrame(data, geometry=data['IncidentPoint'], crs="EPSG:4326")
+    else:
+        data = gpd.GeoDataFrame(data, geometry=data['IncidentPoint'], crs="EPSG:4326")
 
     minx, miny, maxx, maxy = [-76.227826, 36.550525, 75.867555, 36.931973]
     bbox = box(minx, miny, maxx, maxy)
@@ -226,6 +232,14 @@ def add_period_label(incident, time_col, label_dict):
 
 
 def convert_feature_class_to_df(incident, feature_class_addr, label_list, mode_label=''):
+    """
+    The function reads the results in the ArcGIS model and converts the results into DataFrame format
+    :param incident: incident information w/o travel time estimation
+    :param feature_class_addr: the address of the ArcGIS model
+    :param label_list: the labels of the layers in the ArcGIS model
+    :param mode_label: optional, additional information
+    :return: incident information with travel time estimation
+    """
     import arcpy
     import warnings
 
@@ -249,15 +263,23 @@ def convert_feature_class_to_df(incident, feature_class_addr, label_list, mode_l
     return incident
 
 
-def add_inaccessible_routes(incidents, addr_inaccessible_routes, fill_value=-999):
+def add_inaccessible_routes(incidents, addr_inaccessible_routes: str, fill_value=-999):
+    """
+    In ArcGIS analysis, inaccessible routes are not saved in the results. So, the error reports of
+    ArcGIS were saved and read here to add the information to the incident DataFrame.
+    Note that normal-time inaccessible routes are not used, because the inaccessibility is not due to flood.
+    This is because part of the edges are disconnected from the main road network.
+    :param incidents: DataFrame of the incident information
+    :param addr_inaccessible_routes: error reports address
+    :param fill_value: NULL value
+    :return: DataFrame of the incident information with added information
+    """
     import json
     import numpy as np
 
     with open(addr_inaccessible_routes, 'r') as f:
         inaccessible_routes = json.load(f)
     flood_period = inaccessible_routes['flood']
-    # Normal time inaccessible routes are not used, because the inaccessibility is not due to flood.
-    # This is because part of the edges are disconnected from the main road network.
 
     r_list = []
     for k, v in flood_period.items():
@@ -269,11 +291,8 @@ def add_inaccessible_routes(incidents, addr_inaccessible_routes, fill_value=-999
         ]
         r_list.append(no_route_flood + detach_flood)
     routes = [e for l in r_list for e in l]
-
     incident_id_list = [np.int64(i.split('-')[1]) for i in routes]
-
     incidents.loc[incidents['incident_id'].isin(incident_id_list), 'Total_Seconds'] = fill_value
-
     return incidents
 
 
@@ -284,6 +303,13 @@ def convert_timedelta_2_seconds(incidents, col_names):
 
 
 def add_geo_unit(incidents, dir_unit, id_col_geo):
+    """
+    Add geographic information to the incident DataFrame.
+    :param incidents: DataFrame, incident information
+    :param dir_unit: address of the geographic information
+    :param id_col_geo: the name of geographic information column
+    :return: DataFrame, incident information
+    """
     unit_geo = gpd.read_file(dir_unit)
     unit_geo = unit_geo[id_col_geo + ['geometry']]
     unit_geo = unit_geo.to_crs(incidents.crs)
@@ -373,14 +399,13 @@ def delete_outlier_zscore(df, col, threshold=3):
 
     return df
 
-
 def delete_outlier_mahalanobis(df, col):
     import numpy as np
-
     df_c = df[col]
 
     mean = np.mean(df_c.values, axis=0).reshape(1, -1)
     inv_cov_matrix = np.linalg.inv(np.cov(df_c, rowvar=False))
+
     def mahalanobis_distance(x, mean, inv_cov_matrix):
         x_minus_mean = x - mean
         left_term = np.dot(x_minus_mean, inv_cov_matrix)
@@ -391,16 +416,21 @@ def delete_outlier_mahalanobis(df, col):
         lambda row: mahalanobis_distance(row.values.reshape(1, -1), mean, inv_cov_matrix),
         axis=1
     )
-
-    # threshold = 9.21  # Corresponds to chi-squared value with 2 degrees of freedom at p=0.01
-    # threshold = 7.378  # Corresponds to chi-squared value with 2 degrees of freedom at p=0.025
     threshold = 5.991  # Corresponds to chi-squared value with 2 degrees of freedom at p=0.05
     df = df[df_c['Mahalanobis'] <= threshold]
-
     return df
 
 
-def add_econ_class(gdf, bar, income_col, save_col, dir_save=None):
+def add_econ_class(gdf, bar: float, income_col, save_col, dir_save=None):
+    """
+    Add economic class (lower-income class; middle-higher income class) to incident data
+    :param gdf: incidents
+    :param bar: threshold of the middle class
+    :param income_col: name of the column showing income
+    :param save_col: column to save
+    :param dir_save: address to save
+    :return: incidents with added information
+    """
     gdf['econ_class'] = gdf[income_col].apply(lambda x: 'middle_higher' if x > bar else 'lower')
     if dir_save is not None:
         gdf[save_col + ['econ_class', 'geometry']].to_file(dir_save, driver="ESRI Shapefile")
