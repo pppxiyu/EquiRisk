@@ -6,7 +6,7 @@ import math
 
 
 def reg_spatial_lag(
-        df, method, weight_method, k=None,
+        df, method='ML', weight_method='Queen', k=None,
         x='demographic_value', y='diff_travel', w_lag=1, summary=True, spillover=False,
 ):
     m = reg_build_matrix(df, weight_method, k=k)

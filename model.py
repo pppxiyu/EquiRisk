@@ -331,3 +331,4 @@ def add_custom_edge_evaluator(cost_attr_name, restriction_attr_name, nd_name, ro
     network_dataset.customEvaluators = [cost_customizer, restriction_customizer]
     return cost_customizer, restriction_customizer
 
+
