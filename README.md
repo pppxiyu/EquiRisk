@@ -32,3 +32,9 @@ folder as indicated by the *config_vb.py*.
 Please contact with the author if you have any 
 question
 ([xyp@gatech.edu](mailto:xyp@gatech.edu)).
+
+The main analysis results are in the file *main_analysis.ipynb*.
+If the notebook file is too large to display properly on GitHub, 
+it is recommended to enter the notebook [address](https://github.com/pppxiyu/EquiRisk/blob/main/main_analysis.ipynb)
+into [nbviewer](https://nbviewer.org/)
+to render the notebook.
