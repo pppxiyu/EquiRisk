@@ -715,7 +715,8 @@ def map_origin_shift(gdf_incidents, gdf_station, mode='nearest'):
         #     ],
         # )
     )
-    fig.show(renderer="browser")
+    # fig.show(renderer="browser")
+    fig.show(renderer="notebook")
     # fig.write_image(
     #     f"./manuscripts/figs/map_origin_shift_{mode}.png", engine="orca",
     #     width=700, height=650, scale=3.125
@@ -751,7 +752,8 @@ def scatter_dist_icd_travel_time(icd, period, mode='dist'):
     icd_flood = icd_flood.sjoin_nearest(icd_normal_ave, how='left', distance_col='sjoin_dist')
     icd_normal = icd_normal.sjoin_nearest(icd_normal_ave, how='left', distance_col='sjoin_dist')
     if icd_flood['sjoin_dist'].max() > 0:
-        warnings.warn(f"Max dist to the nearest incident loc is {icd_flood['sjoin_dist'].max()}")
+        # warnings.warn(f"Max dist to the nearest incident loc is {icd_flood['sjoin_dist'].max()}")
+        pass
     icd_flood['travel_icrs_ratio'] = icd_flood['TravelTime_left'] / icd_flood['TravelTime_right']
     icd_normal['travel_icrs_ratio'] = icd_normal['TravelTime_left'] / icd_normal['TravelTime_right']
 
@@ -802,7 +804,8 @@ def scatter_dist_icd_travel_time(icd, period, mode='dist'):
             x0=1, x1=1, y0=0, y1=1,
             line=dict(color='black', width=1, dash='dash')
         )
-        fig.show(renderer="browser")
+        # fig.show(renderer="browser")
+        fig.show(renderer="notebook")
         # fig.write_image(
         #     "./manuscripts/figs/dist_travel_increase.png", engine="orca",
         #     width=450, height=450, scale=3.125
@@ -853,7 +856,8 @@ def scatter_dist_icd_travel_time(icd, period, mode='dist'):
             x0=0, x1=900, y0=1, y1=1,
             line=dict(color='black', width=1, dash='dash')
         )
-        fig.show(renderer="browser")
+        # fig.show(renderer="browser")
+        fig.show(renderer="notebook")
         # fig.write_image(
         #     "./manuscripts/figs/scatter_travel_increase.png", engine="orca",
         #     width=450, height=450, scale=3.125
@@ -989,7 +993,8 @@ def scatter_income_service_volumn(incidents, closing_info, plot='scatter'):
             selector=dict(mode='markers'),
             marker=dict(size=10)
         )
-        fig_scatter.show(renderer="browser")
+        # fig_scatter.show(renderer="browser")
+        fig_scatter.show(renderer="notebook")
         # fig_scatter.write_image(
         #     "./manuscripts/figs/scatter_income_volume.png", engine="orca",
         #     width=850 * 0.65, height=225,
@@ -1037,7 +1042,8 @@ def scatter_income_service_volumn(incidents, closing_info, plot='scatter'):
             width=850 * 0.35, height=225,
             margin=dict(l=50, r=50, t=50, b=50)
         )
-        fig_dist.show(renderer="browser")
+        # fig_dist.show(renderer="browser")
+        fig_dist.show(renderer="notebook")
         # fig_dist.write_image(
         #     "./manuscripts/figs/dist_station_income.png", engine="orca",
         #     width=850 * 0.35, height=225,
@@ -1093,7 +1099,8 @@ def scatter_inundation_severity_vs_income(df):
         selector=dict(mode='markers'),
         marker=dict(size=6, color='#777AA6')
     )
-    fig.show(renderer="browser")
+    # fig.show(renderer="browser")
+    fig.show(renderer="notebook")
     # fig.write_image(
     #     "./manuscripts/figs/scatter_income_severity.png", engine="orca",
     #     width=850, height=275, scale=3.125
@@ -1221,7 +1228,8 @@ def bar_per_non_nearest(per_1, per_2):
         width=450, height=450,
         margin=dict(l=50, r=50, t=50, b=50)
     )
-    fig.show(renderer="browser")
+    # fig.show(renderer="browser")
+    fig.show(renderer="notebook")
     # fig.write_image(
     #     f"./manuscripts/figs/bar_percent_nearest.png", engine="orca",
     #     width=450, height=450, scale=3.125
@@ -1286,7 +1294,8 @@ def bar_per_nearest_reason(icd_n, icd_f):
         width=450, height=450,
         margin=dict(l=50, r=50, t=50, b=50)
     )
-    fig.show(renderer="browser")
+    # fig.show(renderer="browser")
+    fig.show(renderer="notebook")
     # fig.write_image(
     #     f"./manuscripts/figs/bar_percent_nearest_reason.png", engine="orca",
     #     width=450, height=450, scale=3.125
@@ -1329,7 +1338,8 @@ def bar_ave_income_normal_disrupted_icd(
         width=450, height=450,
         margin=dict(l=50, r=50, t=50, b=50)
     )
-    fig.show(renderer="browser")
+    # fig.show(renderer="browser")
+    fig.show(renderer="notebook")
     # fig.write_image(
     #     f"./manuscripts/figs/bar_income_normal_disrupted_icd.png", engine="orca",
     #     width=450, height=450, scale=3.125
