@@ -21,6 +21,7 @@ underestimation.
 - rasterio (for processing flood map only)
 - pysal (for regression part)
 - plotly (for visualization only)
+- geojson (for a couple of visualization only)
 ## Run
 Run each part of main_vb.py as needed by analysis. 
 All data used are public dataset. The data folder 
