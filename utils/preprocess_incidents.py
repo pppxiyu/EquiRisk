@@ -353,14 +353,20 @@ def convert_feature_class_to_df(incident, feature_class_addr, label_list, mode_l
 
 def add_inaccessible_routes(incidents, addr_inaccessible_routes: str, fill_value=-999):
     """
-    In ArcGIS analysis, inaccessible routes are not saved in the results. So, the error reports of
-    ArcGIS were saved and read here to add the information to the incident DataFrame.
-    Note that normal-time inaccessible routes are not used, because the inaccessibility is not due to flood.
-    This is because part of the edges are disconnected from the main road network.
-    :param incidents: DataFrame of the incident information
-    :param addr_inaccessible_routes: error reports address
-    :param fill_value: NULL value
-    :return: DataFrame of the incident information with added information
+    Add information about inaccessible routes from ArcGIS error reports to incident data.
+
+    In ArcGIS analysis, inaccessible routes are not saved in the results. The error reports
+    from ArcGIS are saved and read here to add the information to the incident DataFrame.
+    Note that normal-time inaccessible routes are not used, because the inaccessibility
+    is not due to flood but because part of the edges are disconnected from the main road network.
+
+    Args:
+        incidents (DataFrame): DataFrame of the incident information.
+        addr_inaccessible_routes (str): Path to the error reports JSON file.
+        fill_value (int, optional): Value to fill for inaccessible routes. Defaults to -999.
+
+    Returns:
+        DataFrame: DataFrame of the incident information with added inaccessible route information.
     """
     import json
     import numpy as np
@@ -385,6 +391,16 @@ def add_inaccessible_routes(incidents, addr_inaccessible_routes: str, fill_value
 
 
 def convert_timedelta_2_seconds(incidents, col_names):
+    """
+    Convert timedelta columns to seconds.
+
+    Args:
+        incidents (DataFrame): DataFrame containing timedelta columns.
+        col_names (list): List of column names to convert.
+
+    Returns:
+        DataFrame: DataFrame with converted columns.
+    """
     for col in col_names:
         incidents[col] = incidents[col].dt.total_seconds()
     return incidents
@@ -393,10 +409,14 @@ def convert_timedelta_2_seconds(incidents, col_names):
 def add_geo_unit(incidents, dir_unit, id_col_geo):
     """
     Add geographic information to the incident DataFrame.
-    :param incidents: DataFrame, incident information
-    :param dir_unit: address of the geographic information
-    :param id_col_geo: the name of geographic information column
-    :return: DataFrame, incident information
+
+    Args:
+        incidents (DataFrame): DataFrame containing incident information.
+        dir_unit (str): Path to the geographic boundary file.
+        id_col_geo (list): List of column names for geographic identifiers.
+
+    Returns:
+        DataFrame: DataFrame with geographic information added.
     """
     unit_geo = gpd.read_file(dir_unit)
     unit_geo = unit_geo[id_col_geo + ['geometry']]
@@ -406,6 +426,17 @@ def add_geo_unit(incidents, dir_unit, id_col_geo):
 
 
 def import_demographic(dir_demo, value_col, remove_tract=None):
+    """
+    Import and process demographic data from CSV file.
+
+    Args:
+        dir_demo (str): Path to the demographic CSV file.
+        value_col (list): List of column names containing demographic values.
+        remove_tract (list, optional): List of tract names to remove. Defaults to None.
+
+    Returns:
+        DataFrame: Processed demographic data.
+    """
     demographic = pd.read_csv(dir_demo)[['GEO_ID', 'NAME'] + value_col].iloc[1:]
 
     if 'Block Group' in demographic.iloc[0]['NAME']:
@@ -427,6 +458,16 @@ def import_demographic(dir_demo, value_col, remove_tract=None):
 
 
 def merge_incidents_demographic_bg(incidents, demographic):
+    """
+    Merge demographic data with incidents at the block group level.
+
+    Args:
+        incidents (DataFrame): Incident data with geographic identifiers.
+        demographic (DataFrame): Demographic data.
+
+    Returns:
+        DataFrame: Incidents with demographic information merged.
+    """
     demographic['tract_name_adapt'] = '0' + (demographic['tract_name'].astype(float) * 100).astype(int).astype(str)
     demographic['id'] = demographic['tract_name_adapt'] + demographic['block_group_name']
     incidents['id'] = incidents['TRACTCE'] + incidents['BLKGRPCE']
@@ -435,12 +476,32 @@ def merge_incidents_demographic_bg(incidents, demographic):
 
 
 def get_geo_bg(dir_bg, target_county_num='810'):
+    """
+    Get block group boundaries for a specific county.
+
+    Args:
+        dir_bg (str): Path to the block group boundary file.
+        target_county_num (str, optional): County FIPS code. Defaults to '810'.
+
+    Returns:
+        GeoDataFrame: Block group boundaries for the specified county.
+    """
     geo = gpd.read_file(dir_bg)
     geo = geo[geo['COUNTYFP'] == target_county_num]
     return geo
 
 
 def merge_demographic_geo_bg(demographic, dir_bg):
+    """
+    Merge demographic data with block group boundaries.
+
+    Args:
+        demographic (DataFrame): Demographic data.
+        dir_bg (str): Path to the block group boundary file.
+
+    Returns:
+        GeoDataFrame: Demographic data with geographic boundaries.
+    """
     geo = get_geo_bg(dir_bg)
     geo['id'] = geo['TRACTCE'] + geo['BLKGRPCE']
 
@@ -453,6 +514,17 @@ def merge_demographic_geo_bg(demographic, dir_bg):
 
 
 def merge_geo_unit_geo_bg(geo_unit, dir_bg, target_county_num='810'):
+    """
+    Merge geographic units with block group boundaries.
+
+    Args:
+        geo_unit (DataFrame): Geographic unit data.
+        dir_bg (str): Path to the block group boundary file.
+        target_county_num (str, optional): County FIPS code. Defaults to '810'.
+
+    Returns:
+        GeoDataFrame: Geographic units with block group boundaries.
+    """
     geo = gpd.read_file(dir_bg)
     geo = geo[geo['COUNTYFP'] == target_county_num]
     geo['id'] = geo['TRACTCE'] + geo['BLKGRPCE']
@@ -463,6 +535,17 @@ def merge_geo_unit_geo_bg(geo_unit, dir_bg, target_county_num='810'):
 
 
 def aggr_incidents_geo(incidents, period_dict, dir_bg_boundaries):
+    """
+    Aggregate incidents by geographic units and add period labels.
+
+    Args:
+        incidents (DataFrame): Incident data.
+        period_dict (dict): Dictionary mapping period labels to values.
+        dir_bg_boundaries (str): Path to block group boundary file.
+
+    Returns:
+        GeoDataFrame: Aggregated incidents by geographic units.
+    """
     g_units = incidents[
         ['id', 'diff_travel', 'demographic_value', 'wellness', 'period_actual', 'TravelTime', 'Total_Seconds']
     ].groupby('id').mean()
@@ -477,6 +560,17 @@ def aggr_incidents_geo(incidents, period_dict, dir_bg_boundaries):
 
 
 def delete_outlier_zscore(df, col, threshold=3):
+    """
+    Remove outliers using z-score method.
+
+    Args:
+        df (DataFrame): Input DataFrame.
+        col (list): List of column names to check for outliers.
+        threshold (float, optional): Z-score threshold. Defaults to 3.
+
+    Returns:
+        DataFrame: DataFrame with outliers removed.
+    """
     from scipy import stats
     import numpy as np
     for c in col:
@@ -485,7 +579,18 @@ def delete_outlier_zscore(df, col, threshold=3):
         ]
     return df
 
+
 def delete_outlier_mahalanobis(df, col):
+    """
+    Remove outliers using Mahalanobis distance method.
+
+    Args:
+        df (DataFrame): Input DataFrame.
+        col (list): List of column names to check for outliers.
+
+    Returns:
+        DataFrame: DataFrame with outliers removed.
+    """
     import numpy as np
     df_c = df[col]
 
@@ -509,13 +614,17 @@ def delete_outlier_mahalanobis(df, col):
 
 def add_econ_class(gdf, bar: float, income_col, save_col, dir_save=None):
     """
-    Add economic class (lower-income class; middle-higher income class) to incident data
-    :param gdf: incidents
-    :param bar: threshold of the middle class
-    :param income_col: name of the column showing income
-    :param save_col: column to save
-    :param dir_save: address to save
-    :return: incidents with added information
+    Add economic class (lower-income class; middle-higher income class) to incident data.
+
+    Args:
+        gdf (GeoDataFrame): Incident data.
+        bar (float): Threshold for the middle class.
+        income_col (str): Name of the column showing income.
+        save_col (list): List of columns to save.
+        dir_save (str, optional): Path to save the output file. Defaults to None.
+
+    Returns:
+        GeoDataFrame: Incidents with economic class information added.
     """
     gdf['econ_class'] = gdf[income_col].apply(lambda x: 'middle_higher' if x > bar else 'lower')
     if dir_save is not None:
@@ -524,7 +633,19 @@ def add_econ_class(gdf, bar: float, income_col, save_col, dir_save=None):
 
 
 def save_ict_to_shp(gdf_i, dir_save, time_range_dict=None, to_arcgis=False, gdb_path=None,):
+    """
+    Save incident data to shapefile and GeoJSON formats.
 
+    Args:
+        gdf_i (GeoDataFrame): Incident data to save.
+        dir_save (str): Directory to save the files.
+        time_range_dict (dict, optional): Time range filter. Defaults to None.
+        to_arcgis (bool, optional): Whether to save to ArcGIS geodatabase. Defaults to False.
+        gdb_path (str, optional): Path to ArcGIS geodatabase. Defaults to None.
+
+    Returns:
+        None
+    """
     if time_range_dict is not None:
         begin, end = list(time_range_dict.keys())
         gdf = gdf[(gdf['Call Date and Time'] >= begin) & (gdf['Call Date and Time'] <= end)]
@@ -556,6 +677,17 @@ def save_ict_to_shp(gdf_i, dir_save, time_range_dict=None, to_arcgis=False, gdb_
 
 
 def create_grid(gdf, n_rows=10, n_cols=10):
+    """
+    Create a regular grid over the extent of a GeoDataFrame.
+
+    Args:
+        gdf (GeoDataFrame): Reference GeoDataFrame for grid extent.
+        n_rows (int, optional): Number of rows in the grid. Defaults to 10.
+        n_cols (int, optional): Number of columns in the grid. Defaults to 10.
+
+    Returns:
+        GeoDataFrame: Regular grid with labeled cells.
+    """
     from shapely.geometry import box
     xmin, ymin, xmax, ymax = gdf.total_bounds
     cell_width = (xmax - xmin) / n_cols
@@ -577,6 +709,19 @@ def create_grid(gdf, n_rows=10, n_cols=10):
 
 
 def get_hotspots_ave_time(icd):
+    """
+    Calculate average travel time by hour for hotspot locations.
+
+    Args:
+        icd (DataFrame): Incident data with location and time information.
+
+    Returns:
+        tuple: (time_by_hour, time_std_by_hour, time_min_by_hour, loc)
+            - time_by_hour: Average travel time for each hour
+            - time_std_by_hour: Standard deviation of travel time for each hour
+            - time_min_by_hour: Minimum travel time for each hour
+            - loc: List of hotspot locations
+    """
     icd['Call Date and Time'] = icd['Call Date and Time'].dt.tz_convert('America/New_York')
     icd['local_hour'] = icd['Call Date and Time'].dt.hour
     hotspots = icd['IncidentPoint'].value_counts()

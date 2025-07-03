@@ -281,7 +281,7 @@ def add_water_depth_on_roads_w_bridge(
     return roads
 
 
-def get_water_depth(roads, polygons,new_col_name, label):
+def get_water_depth(roads, polygons, new_col_name, label):
     """
     Calculate max and mean water depth for each road segment based on inundation polygons.
 
@@ -336,7 +336,7 @@ def get_overhead_bridge(bridge_geo, non_bridge_geo, plot=True):
 
 def get_corresponding_road(road, roads, top=1, bf=10):
     """
-    Find the corresponding road(s) in a set of roads for a given road segment.
+    Find the corresponding roads for a given road segment.
 
     Args:
         road (GeoDataFrame): Single road segment.
@@ -367,7 +367,21 @@ def get_corresponding_road(road, roads, top=1, bf=10):
 
 
 class InundationToSpeed:
+    """
+    Class to convert water depth to speed reduction for road segments.
+    
+    This class implements methods to calculate how water depth affects vehicle speed
+    on road segments, including cutoff thresholds and speed reduction curves.
+    """
+    
     def __init__(self, thr=30, unit_checker=False):
+        """
+        Initialize the InundationToSpeed converter.
+
+        Args:
+            thr (float, optional): Water depth threshold in cm. Defaults to 30.
+            unit_checker (bool, optional): Whether to prompt for unit confirmation. Defaults to False.
+        """
         # input('threshold should be cm.')
         self.thr = thr
         self.unit_checker = unit_checker
@@ -380,6 +394,12 @@ class InundationToSpeed:
         return
 
     def build_decreasing_curve(self):
+        """
+        Build linear regression curves for speed reduction based on water depth.
+        
+        Creates a linear model for each unique speed value to predict reduced speed
+        based on water depth from 0 to threshold.
+        """
         from sklearn.linear_model import LinearRegression
         from sklearn.preprocessing import PolynomialFeatures
         for s in self.speed_unique:
@@ -391,9 +411,27 @@ class InundationToSpeed:
         return
 
     def calculate_safe_control_speed(self, series):
+        """
+        Calculate safe control speed based on water depth using a quadratic formula.
+
+        Args:
+            series (Series): Water depth values.
+
+        Returns:
+            Series: Safe control speed values.
+        """
         return 0.0009 * series * series - 0.5529 * series + 86.9448
 
     def cutoff(self, depth_series):
+        """
+        Determine which road segments should be cut off due to excessive water depth.
+
+        Args:
+            depth_series (Series): Water depth values in feet.
+
+        Returns:
+            Series: Boolean series indicating which segments should be cut off.
+        """
         if self.unit_checker:
             input('For cutoff(), the input water depth should be ft. Enter to continue.')
 
@@ -402,6 +440,16 @@ class InundationToSpeed:
         return if_cut
 
     def reduce(self, depth_series, maxspeed_series):
+        """
+        Calculate reduced speed for road segments based on water depth.
+
+        Args:
+            depth_series (Series): Water depth values in feet.
+            maxspeed_series (Series): Original maximum speed values in mph.
+
+        Returns:
+            Series: Reduced speed values.
+        """
         if self.unit_checker:
             input('For reduce(), the input water depth should be ft, speed is mile/h. Enter to continue.')
 
@@ -436,6 +484,15 @@ class InundationToSpeed:
         return speed_df['speed']
 
     def apply_orig_speed(self, original_maxspeed_series):
+        """
+        Apply original speed to road segments that are not affected by inundation.
+
+        Args:
+            original_maxspeed_series (Series): Original maximum speed values in mph.
+
+        Returns:
+            Series: Final speed values after applying cutoff and reduction.
+        """
         if self.unit_checker:
             input('For apply_original_speed(), the input speed is mile/h. Enter to continue.')
 
@@ -449,6 +506,19 @@ class InundationToSpeed:
 def import_road_seg_w_inundation_info(
         dir_road_inundated, speed_assigned, VDOT_speed=None, VDOT_speed_col=None, osm_match_vdot=None
 ):
+    """
+    Import road segments with inundation information and calculate travel times.
+
+    Args:
+        dir_road_inundated (str): Path to road segments with inundation data.
+        speed_assigned (dict): Speed assignment dictionary.
+        VDOT_speed (dict, optional): VDOT speed data. Defaults to None.
+        VDOT_speed_col (str, optional): VDOT speed column name. Defaults to None.
+        osm_match_vdot (str, optional): Path to OSM-VDOT matching file. Defaults to None.
+
+    Returns:
+        GeoDataFrame: Road segments with inundation-adjusted travel times.
+    """
     road_segment_inundation = gpd.read_file(dir_road_inundated)
     road_segment_inundation = add_roads_max_speed(
         road_segment_inundation, speed_assigned,
@@ -496,6 +566,20 @@ def import_road_seg_w_inundation_info(
 def add_VDOT_speed(
         road_segment, VDOT_speed, time_label, match_info, VDOT_speed_col, time_label_offset=0,
 ):
+    """
+    Add VDOT speed data to road segments for a specific time period.
+
+    Args:
+        road_segment (GeoDataFrame): Road segment data.
+        VDOT_speed (dict): VDOT speed data by time period.
+        time_label (int): Time label for the period.
+        match_info (GeoDataFrame): OSM-VDOT matching information.
+        VDOT_speed_col (str): VDOT speed column name.
+        time_label_offset (int, optional): Offset for time label. Defaults to 0.
+
+    Returns:
+        GeoDataFrame: Road segments with VDOT speed data added.
+    """
     time_label_updated = time_label - time_label_offset
     do = False
     for k, v in VDOT_speed.items():
@@ -533,6 +617,16 @@ def add_VDOT_speed(
 
 
 def calculate_speed_VDOT_output(gdf, speed_col):
+    """
+    Calculate speed from VDOT output data.
+
+    Args:
+        gdf (DataFrame): VDOT output data.
+        speed_col (str): Speed column name ('CSPD_1' or 'TIME_1').
+
+    Returns:
+        DataFrame: Data with calculated speed values.
+    """
     if speed_col == 'CSPD_1':
         gdf['speed'] = gdf[speed_col]
         return gdf
@@ -547,6 +641,16 @@ def calculate_speed_VDOT_output(gdf, speed_col):
 
 
 def merge_road_info_VDOT(dir_shape, dir_info):
+    """
+    Merge road shapefile with VDOT information from DBF file.
+
+    Args:
+        dir_shape (str): Path to road shapefile.
+        dir_info (str): Path to VDOT DBF file.
+
+    Returns:
+        GeoDataFrame: Road data merged with VDOT information.
+    """
     from simpledbf import Dbf5
     road_shp = gpd.read_file(dir_shape)
     road_info = Dbf5(dir_info).to_dataframe()
@@ -557,7 +661,16 @@ def merge_road_info_VDOT(dir_shape, dir_info):
 
 
 def match_osm_n_VDOT(dir_osm, dir_VDOT, dir_save, not_service=True, dir_VDOT_info=None):
+    """
+    Match OSM road data with VDOT road data.
 
+    Args:
+        dir_osm (str): Path to OSM road data.
+        dir_VDOT (str): Path to VDOT road data.
+        dir_save (str): Path to save matched data.
+        not_service (bool, optional): Whether to exclude service roads. Defaults to True.
+        dir_VDOT_info (str, optional): Path to VDOT info file. Defaults to None.
+    """
     df_osm = gpd.read_file(dir_osm)
     df_vdot = gpd.read_file(dir_VDOT)
 
@@ -586,6 +699,15 @@ def match_osm_n_VDOT(dir_osm, dir_VDOT, dir_save, not_service=True, dir_VDOT_inf
 
 
 def get_middle_hour(hours):
+    """
+    Calculate the middle hour between two given hours, handling day wraparound.
+
+    Args:
+        hours (list): List of two integers representing hours.
+
+    Returns:
+        int: Middle hour between the two input hours.
+    """
     if len(hours) != 2:
         raise ValueError("The list must contain exactly two integers representing hours.")
 
@@ -603,6 +725,15 @@ def get_middle_hour(hours):
 
 
 def get_time_label(period_dict):
+    """
+    Generate time labels for each hour in a period dictionary.
+
+    Args:
+        period_dict (dict): Dictionary with start and end times as keys and labels as values.
+
+    Returns:
+        dict: Dictionary mapping time strings to labels.
+    """
     from datetime import datetime, timedelta
 
     start_time = datetime.strptime(list(period_dict.keys())[0], '%Y-%m-%d %H:%M:%S')
@@ -622,6 +753,19 @@ def get_time_label(period_dict):
 
 
 def merge_inundation_info_2_net(dir_net, dir_road, period_dict, period_split, table_name):
+    """
+    Merge inundation information into network data for different time periods.
+
+    Args:
+        dir_net (str): Path to network SQLite database.
+        dir_road (str): Path to road data with inundation information.
+        period_dict (dict): Period dictionary.
+        period_split (dict): Period split dictionary.
+        table_name (str): Name of the table in the database.
+
+    Returns:
+        dict: Dictionary with network data for each period.
+    """
     import sqlite3
 
     conn = sqlite3.connect(dir_net)
@@ -651,6 +795,15 @@ def merge_inundation_info_2_net(dir_net, dir_road, period_dict, period_split, ta
 
 
 def edit_net_using_inundation(net):
+    """
+    Edit network data using inundation information to adjust travel times.
+
+    Args:
+        net (dict): Network data dictionary.
+
+    Returns:
+        dict: Edited network data with adjusted travel times.
+    """
     converter = InundationToSpeed(30)
     new_net = {}
     for k, v in net.items():
@@ -674,6 +827,16 @@ def edit_net_using_inundation(net):
 
 
 def edit_net_sqlite(original_sql, new_sql, nets, period_split, table_name):
+    """
+    Edit SQLite network databases for different time periods.
+
+    Args:
+        original_sql (str): Path to original SQLite database.
+        new_sql (str): Directory to save new databases.
+        nets (dict): Network data dictionary.
+        period_split (dict): Period split dictionary.
+        table_name (str): Name of the table to edit.
+    """
     import os
     import shutil
     import sqlite3
@@ -728,6 +891,17 @@ def edit_net_sqlite(original_sql, new_sql, nets, period_split, table_name):
 
 
 def add_geo_unit(roads, dir_unit, id_col_geo):
+    """
+    Add geographic unit information to road segments.
+
+    Args:
+        roads (GeoDataFrame): Road segment data.
+        dir_unit (str): Path to geographic unit boundary file.
+        id_col_geo (list): List of column names for geographic identifiers.
+
+    Returns:
+        GeoDataFrame: Road segments with geographic unit information.
+    """
     unit_geo = gpd.read_file(dir_unit)
     unit_geo = unit_geo[id_col_geo + ['geometry']]
     unit_geo = unit_geo.to_crs(roads.crs)
@@ -736,6 +910,16 @@ def add_geo_unit(roads, dir_unit, id_col_geo):
 
 
 def merge_roads_demographic_bg(roads, demographic):
+    """
+    Merge demographic data with roads at the block group level.
+
+    Args:
+        roads (GeoDataFrame): Road segment data.
+        demographic (DataFrame): Demographic data.
+
+    Returns:
+        GeoDataFrame: Road segments with demographic information.
+    """
     roads['id'] = roads['COUNTYFP'] + roads['TRACTCE'] + roads['BLKGRPCE']
     assert (roads['COUNTYFP'].value_counts().iloc[0] / roads['COUNTYFP'].value_counts().sum()) > 0.99, \
         'One county must be dominating.'
@@ -750,6 +934,18 @@ def merge_roads_demographic_bg(roads, demographic):
 
 
 def calculate_severity_metric(group, cutoff_thr, depth_unit, depth_cols,):
+    """
+    Calculate severity metric for a group of road segments.
+
+    Args:
+        group (DataFrame): Group of road segments.
+        cutoff_thr (float): Cutoff threshold for severity calculation.
+        depth_unit (str): Unit of depth measurement ('cm' or 'ft').
+        depth_cols (list): List of depth column names.
+
+    Returns:
+        tuple: (metric, income) - severity metric and average income.
+    """
     group['ave_max_depth'] = group[depth_cols].mean(axis=1)
     max_severity = (group['length'] * cutoff_thr).sum()
     if depth_unit == 'cm':
@@ -764,6 +960,20 @@ def calculate_severity_metric(group, cutoff_thr, depth_unit, depth_cols,):
 
 
 def calculate_severity_metric_by_period(group, cutoff_thr, depth_unit, depth_cols, period_split, period_dict):
+    """
+    Calculate severity metrics for different time periods.
+
+    Args:
+        group (DataFrame): Group of road segments.
+        cutoff_thr (float): Cutoff threshold for severity calculation.
+        depth_unit (str): Unit of depth measurement ('cm' or 'ft').
+        depth_cols (list): List of depth column names.
+        period_split (dict): Period split dictionary.
+        period_dict (dict): Period dictionary.
+
+    Returns:
+        tuple: (metric_list, income) - list of severity metrics and average income.
+    """
     def if_in_period(hour):
         if start < end:
             if start <= hour < end:
@@ -796,6 +1006,18 @@ def calculate_severity_metric_by_period(group, cutoff_thr, depth_unit, depth_col
 
 
 def calculate_congestion_metric(group, ff_time, congestion_time, manually_cut=10):
+    """
+    Calculate congestion metric for a group of road segments.
+
+    Args:
+        group (DataFrame): Group of road segments.
+        ff_time (str): Column name for free-flow time.
+        congestion_time (str): Column name for congestion time.
+        manually_cut (float, optional): Manual cutoff value. Defaults to 10.
+
+    Returns:
+        tuple: (metric, income) - congestion metric and average income, or (None, None) if no valid data.
+    """
     group = group[group[ff_time] > 1e-3]
     group = group[group[congestion_time] > 1e-3]
     group = group[group['LENGTH_full_net'] != 0]  # remove error
@@ -808,6 +1030,19 @@ def calculate_congestion_metric(group, ff_time, congestion_time, manually_cut=10
 
 
 def get_congestion_metrics(dir_road, period_short, dir_road_cube6, dir_bg_boundaries, dir_income_bg):
+    """
+    Calculate congestion metrics for different time periods.
+
+    Args:
+        dir_road (str): Base directory for road data.
+        period_short (list): List of period abbreviations.
+        dir_road_cube6 (str): Path to CUBE6 road data.
+        dir_bg_boundaries (str): Path to block group boundaries.
+        dir_income_bg (str): Path to income data.
+
+    Returns:
+        list: List of DataFrames with congestion metrics for each period.
+    """
     import pandas as pd
     import os
     from utils.preprocess_incidents import import_demographic
