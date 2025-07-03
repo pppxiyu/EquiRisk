@@ -526,7 +526,8 @@ def map_road_speed(gdf, time_col, label=''):
         width=610,
         height=800,
     )
-    fig.show(renderer="browser")
+    # fig.show(renderer="browser")
+    fig.show(renderer="notebook")
     # fig.write_image(
     #     f"./manuscripts/figs/map_traffic{label}.png", engine="orca",
     #     width=610, height=800, scale=3.125
@@ -1125,7 +1126,6 @@ def scatter_income_vs_congestion(df_list_d, df_list_c, mode='disrupted_net', exp
     fig = px.scatter(
         df, x='income', y='congestion', color='period',
         color_discrete_sequence=color_list,
-        # trendline='ols',
     )
     fig.update_layout(
         xaxis=dict(
@@ -1160,13 +1160,15 @@ def scatter_income_vs_congestion(df_list_d, df_list_c, mode='disrupted_net', exp
     )
     if mode == 'diff':
         fig.update_layout(yaxis=dict(range=[-100, 200]), width=610, height=250)
-        fig.show(renderer="browser")
+        # fig.show(renderer="browser")
+        fig.show(renderer="notebook")
         # fig.write_image(
         #     f"./manuscripts/figs/scatter_income_congestion_{mode}.png", engine="orca",
         #     width=610, height=250, scale=3.125
         # )
     else:
-        fig.show(renderer="browser")
+        # fig.show(renderer="browser")
+        fig.show(renderer="notebook")
         # fig.write_image(
         #     f"./manuscripts/figs/scatter_income_congestion_{mode}.png", engine="orca",
         #     width=600, height=250, scale=3.125
@@ -1181,13 +1183,15 @@ def scatter_income_vs_congestion(df_list_d, df_list_c, mode='disrupted_net', exp
                     trace.visible = True
             if mode == 'diff':
                 fig.update_layout(yaxis=dict(range=[-100, 200]), width=610,)
-                fig.show(renderer="browser")
+                # fig.show(renderer="browser")
+                fig.show(renderer="notebook")
                 # fig.write_image(
                 #     f"./manuscripts/figs/scatter_income_congestion_{mode}_{n}.png", engine="orca",
                 #     width=610, scale=3.125
                 # )
             else:
-                fig.show(renderer="browser")
+                # fig.show(renderer="browser")
+                fig.show(renderer="notebook")
                 # fig.write_image(
                 #     f"./manuscripts/figs/scatter_income_congestion_{mode}_{n}.png", engine="orca",
                 #     width=600, height=250, scale=3.125
@@ -1407,7 +1411,8 @@ def line_hotspot_ave_time(t_by_h, t_std_by_h, t_min_by_h, loc):
         width=600, height=400,
         margin=dict(l=50, r=50, t=50, b=50)
     )
-    fig.show(renderer="browser")
+    # fig.show(renderer="browser")
+    fig.show(renderer="notebook")
     # fig.write_image(
     #     f"./manuscripts/figs/line_ave_travel_time_hour.png", engine="orca",
     #     width=600, height=400, scale=3.125
@@ -1504,7 +1509,8 @@ def scatter_inundation_severity_vs_congestion(
     for trace in fig.data:
         if trace.mode == 'lines':
             trace.visible = False
-    fig.show(renderer="browser")
+    # fig.show(renderer="browser")
+    fig.show(renderer="notebook")
     # fig.write_image(
     #     f"./manuscripts/figs/scatter_congestion_inundation.png", engine="orca",
     #     width=600, height=250, scale=3.125
@@ -1513,13 +1519,14 @@ def scatter_inundation_severity_vs_congestion(
         if trace.mode == 'lines':
             trace.visible = True
     if expand:
-        for n in [t.name for t in fig.data]:
+        for n in list(set([t.name for t in fig.data])):
             for trace in fig.data:
                 if trace.name not in [n]:
                     trace.visible = False
                 else:
                     trace.visible = True
-            fig.show(renderer="browser")
+            # fig.show(renderer="browser")
+            fig.show(renderer="notebook")
             # fig.write_image(
             #     f"./manuscripts/figs/scatter_congestion_inundation_{n}.png", engine="orca",
             #     width=600, height=250, scale=3.125
@@ -1594,7 +1601,8 @@ def map_inundation_severity_and_congestion(inundation, congestion_list, block_gr
             height=600,
             margin=dict(l=0, r=0, t=0, b=0),
         )
-        fig.show(renderer="browser")
+        # fig.show(renderer="browser")
+        fig.show(renderer="notebook")
         # fig.write_image(
         #     f"./manuscripts/figs/map_block_group_{save_label}_{value_col}.png", engine="orca",
         #     width=600, height=600, scale=3.125

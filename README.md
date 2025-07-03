@@ -15,13 +15,14 @@ underestimation.
 - numpy
 - pandas
 - geopandas
-- arcpy (requires access to ArcGIS Pro)
+- arcpy (requires license to ArcGIS Pro)
 - networkx
-- osmnx (for pulling road data)
-- rasterio (for processing flood map only)
 - pysal (for regression part)
 - plotly (for visualization only)
+- osmnx (for pulling road data only)
+- rasterio (for processing flood maps only)
 - geojson (for a couple of visualization only)
+- simpledbf (for function merge_road_info_VDOT only)
 ## Run
 Run each part of main_vb.py as needed by analysis. 
 All data used are public dataset. The data folder 
