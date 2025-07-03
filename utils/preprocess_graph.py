@@ -4,6 +4,14 @@ import os
 
 
 def build_feature_dataset_arcgis(geodatabase_addr, road_seg_gdf, spatial_ref='./data/roads/4326.prj'):
+    """
+    Build a feature dataset in an ArcGIS geodatabase from a GeoDataFrame of road segments.
+
+    Args:
+        geodatabase_addr (str): Path to the ArcGIS geodatabase.
+        road_seg_gdf (GeoDataFrame): Road segment data.
+        spatial_ref (str, optional): Path to the spatial reference file. Defaults to './data/roads/4326.prj'.
+    """
     # geodatabase should be pre-built from ArcGIS pro manually
     # road segment data should be in geojson format
 
@@ -27,6 +35,12 @@ def build_feature_dataset_arcgis(geodatabase_addr, road_seg_gdf, spatial_ref='./
 
 
 def build_network_dataset_arcgis(geodatabase_addr):
+    """
+    Create and build a network dataset in an ArcGIS geodatabase.
+
+    Args:
+        geodatabase_addr (str): Path to the ArcGIS geodatabase.
+    """
     arcpy.na.CreateNetworkDataset(  # create network dataset
         f'{geodatabase_addr}/road_network',
         "road_nd", 'road_seg',
@@ -36,6 +50,17 @@ def build_network_dataset_arcgis(geodatabase_addr):
 
 
 def _adapt_2_turn_rules_arcgis(rows_4_insert_list, road_seg_id, road_segment):
+    """
+    Adapt turn restriction rows for ArcGIS by handling interior and add-on roads.
+
+    Args:
+        rows_4_insert_list (list): List of rows to insert for turn restrictions.
+        road_seg_id (int): Road segment ID.
+        road_segment (GeoDataFrame): Road segment data.
+
+    Returns:
+        list: Updated list of rows for ArcGIS turn rules.
+    """
     add_on_list = []
     interior_list = []
     for row in rows_4_insert_list:
@@ -105,6 +130,16 @@ def _adapt_2_turn_rules_arcgis(rows_4_insert_list, road_seg_id, road_segment):
 
 
 def _insert_turn_rows_arcgis(addr_fd, turn_name, rows_4_insert_list, fields, road_segment):
+    """
+    Insert turn restriction rows into an ArcGIS feature dataset.
+
+    Args:
+        addr_fd (str): Path to the feature dataset.
+        turn_name (str): Name of the turn restriction table.
+        rows_4_insert_list (list): List of rows to insert.
+        fields (list): List of field names.
+        road_segment (GeoDataFrame): Road segment data.
+    """
     import warnings
     # make up for the none
     updated_rows_4_insert_list = []
@@ -153,6 +188,17 @@ def _insert_turn_rows_arcgis(addr_fd, turn_name, rows_4_insert_list, fields, roa
 def add_turn_restriction_arcgis(
         addr_fd, fields, turn_name, turn_restriction, road_segment, wrong_restriction_list,
 ):
+    """
+    Add turn restrictions to an ArcGIS network dataset.
+
+    Args:
+        addr_fd (str): Path to the feature dataset.
+        fields (list): List of field names.
+        turn_name (str): Name of the turn restriction table.
+        turn_restriction (DataFrame): Turn restriction data.
+        road_segment (GeoDataFrame): Road segment data.
+        wrong_restriction_list (list): List of restriction IDs to skip.
+    """
 
     road_seg_id = arcpy.Describe(f'{addr_fd}/road_seg').DSID
     rows_4_insert_list = []
@@ -236,19 +282,5 @@ def add_turn_restriction_arcgis(
     _insert_turn_rows_arcgis(addr_fd, turn_name, rows_4_insert_list, fields, road_segment)
 
     return
-
-
-##########################
-def legacy_roads_2_graph(roads):
-    import momepy
-    roads4graph = roads.copy()
-    roads4graph['geometry'] = roads4graph['line'].to_crs(roads4graph.line.crs)
-    roads4graph = roads4graph.set_geometry("geometry")
-    graph = momepy.gdf_to_nx(roads4graph, approach='dual', multigraph=False, angles=False)
-    graph = nx.relabel_nodes(graph, nx.get_node_attributes(graph, 'OBJECTID'))
-    for edge in graph.edges():
-        graph[edge[0]][edge[1]]['weight'] = (graph.nodes[edge[0]]['SHAPElen'] + graph.nodes[edge[1]]['SHAPElen']) / 2
-    return graph
-
 
 

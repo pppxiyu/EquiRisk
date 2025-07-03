@@ -3,6 +3,14 @@ import geopandas as gpd
 
 
 def geocode_incident(data_addr, time_range, save_addr):
+    """
+    Geocode incident addresses using ArcGIS geocoder and save the results to a CSV file.
+
+    Args:
+        data_addr (str): Path to the CSV file containing incident data.
+        time_range (list): List of two strings representing the start and end date for filtering incidents.
+        save_addr (str): Path to save the geocoded CSV file.
+    """
     import geopy as gpy
     from geopy.extra.rate_limiter import RateLimiter
 
@@ -37,8 +45,13 @@ def geocode_incident(data_addr, time_range, save_addr):
 
 def import_incident(address: str):
     """
-    :param address: the address of geocoded and ready-to-use incident data
-    :return: processed data in GeoDataFrame format
+    Import geocoded and ready-to-use incident data as a GeoDataFrame.
+
+    Args:
+        address (str): Path to the geocoded incident CSV file.
+
+    Returns:
+        GeoDataFrame: Processed incident data with geometry column.
     """
     from shapely.geometry import box
 
@@ -82,6 +95,15 @@ def import_incident(address: str):
 
 
 def import_raw_incident_chs(address):
+    """
+    Import raw incident data and preprocess it for geocoding.
+
+    Args:
+        address (str): Path to the raw incident CSV file.
+
+    Returns:
+        DataFrame: Preprocessed incident data ready for geocoding.
+    """
     df = pd.read_csv(address)
     df['id'] = range(1, len(df) + 1)
 
@@ -103,6 +125,14 @@ def import_raw_incident_chs(address):
 
 
 def geocode_incident_chs(inc_dir, save_addr, time_range=None):
+    """
+    Geocode incident addresses and save the results to a CSV file.
+
+    Args:
+        inc_dir (str): Path to the raw incident CSV file.
+        save_addr (str): Path to save the geocoded CSV file.
+        time_range (list, optional): List of two datetime objects for filtering incidents.
+    """
     import os
     if os.path.exists(save_addr):
         print('Geocoded file exists.')
@@ -130,6 +160,15 @@ def geocode_incident_chs(inc_dir, save_addr, time_range=None):
 
 
 def import_incident_chs(address):
+    """
+    Import geocoded Charleston incident data as a GeoDataFrame.
+
+    Args:
+        address (str): Path to the geocoded incident CSV file.
+
+    Returns:
+        GeoDataFrame: Processed incident data with geometry column.
+    """
     df = pd.read_csv(address)
     df = df.drop(columns=['address', 'coordinate', 'elevation'])
     for c in ['call_time', 'assign_time', 'enroute_time', 'on_scene_time', 'close_time']:
@@ -148,6 +187,18 @@ def import_incident_chs(address):
 
 
 def import_incidents_add_info(dir_incidents, rescue_station, period_dict, routing_nearest=None):
+    """
+    Import incidents and add rescue station and period label information.
+
+    Args:
+        dir_incidents (str): Path to the incident CSV file.
+        rescue_station (GeoDataFrame): Rescue station locations.
+        period_dict (dict): Dictionary mapping period labels to values.
+        routing_nearest (str, optional): Path to routing nearest CSV file.
+
+    Returns:
+        GeoDataFrame: Incidents with additional information.
+    """
     incidents = import_incident(dir_incidents)
     incidents = add_actual_rescue_station(incidents, rescue_station)
     if routing_nearest is not None:
@@ -161,6 +212,16 @@ def import_incidents_add_info(dir_incidents, rescue_station, period_dict, routin
 
 
 def add_actual_rescue_station(incident, rescue):
+    """
+    Merge actual rescue station information into incident data.
+
+    Args:
+        incident (GeoDataFrame): Incident data.
+        rescue (GeoDataFrame): Rescue station data.
+
+    Returns:
+        GeoDataFrame: Incident data with rescue station info merged.
+    """
     rescue = rescue.drop('geometry', axis=1)
     incident = incident[incident['Rescue Squad Number'].isin(rescue.Number.to_list())]
     incident = incident.merge(rescue, how='left', left_on='Rescue Squad Number', right_on='Number')
@@ -168,6 +229,18 @@ def add_actual_rescue_station(incident, rescue):
 
 
 def add_nearest_rescue_station(incident, rescue, routing_nearest=None, mode='routing'):
+    """
+    Add nearest rescue station information to each incident, either by geometric or routing distance.
+
+    Args:
+        incident (GeoDataFrame): Incident data.
+        rescue (GeoDataFrame): Rescue station data.
+        routing_nearest (str, optional): Path to routing nearest CSV file (for 'routing' mode).
+        mode (str): 'routing' or 'geometric'.
+
+    Returns:
+        GeoDataFrame: Incident data with nearest rescue station info.
+    """
     if mode == 'routing':
         assert routing_nearest is not None, "Specify nearest stations with routing dist. using external file. "
 
@@ -199,6 +272,17 @@ def add_nearest_rescue_station(incident, rescue, routing_nearest=None, mode='rou
 
 
 def add_period_label(incident, time_col, label_dict):
+    """
+    Add period labels to incidents based on a time column and a label dictionary.
+
+    Args:
+        incident (GeoDataFrame): Incident data.
+        time_col (str): Name of the time column.
+        label_dict (dict): Dictionary mapping period start/end to labels.
+
+    Returns:
+        GeoDataFrame: Incident data with period labels.
+    """
     from datetime import datetime, timedelta
 
     incident['period_label'] = len(incident) * ['']
@@ -233,12 +317,16 @@ def add_period_label(incident, time_col, label_dict):
 
 def convert_feature_class_to_df(incident, feature_class_addr, label_list, mode_label=''):
     """
-    The function reads the results in the ArcGIS model and converts the results into DataFrame format
-    :param incident: incident information w/o travel time estimation
-    :param feature_class_addr: the address of the ArcGIS model
-    :param label_list: the labels of the layers in the ArcGIS model
-    :param mode_label: optional, additional information
-    :return: incident information with travel time estimation
+    Read ArcGIS model results and convert them into a DataFrame format.
+
+    Args:
+        incident (GeoDataFrame): Incident information without travel time estimation.
+        feature_class_addr (str): Path to the ArcGIS model results.
+        label_list (list): List of labels for the ArcGIS model layers.
+        mode_label (str, optional): Additional label for the mode.
+
+    Returns:
+        DataFrame: Incident information with travel time estimation.
     """
     import arcpy
     import warnings
@@ -391,12 +479,10 @@ def aggr_incidents_geo(incidents, period_dict, dir_bg_boundaries):
 def delete_outlier_zscore(df, col, threshold=3):
     from scipy import stats
     import numpy as np
-
     for c in col:
         df = df[
             (np.abs(stats.zscore(df[c].values)) < 3)
         ]
-
     return df
 
 def delete_outlier_mahalanobis(df, col):
