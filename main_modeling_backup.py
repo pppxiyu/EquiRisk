@@ -447,10 +447,10 @@ if __name__ == "__main__":
             calculate_incidents_with_gis_travel_time(op=1), demo_label=s,
         )
         reg_model_normal = reg.reg_spatial_lag(
-            geo_units_n_op1, w_lag=1, method='ML', weight_method='Queen',
+            geo_units_n_op1, w_lag=1, weight_method='Queen',
         )
         reg_model = reg.reg_spatial_lag(
-            geo_units_f_op1, w_lag=1, method='ML', weight_method='Queen',
+            geo_units_f_op1, w_lag=1, weight_method='Queen',
         )
         vis.scatter_demo_vs_error(
             geo_units_f_op1,  color='#235689',  # flooding day
@@ -503,7 +503,7 @@ if __name__ == "__main__":
         _, _, _, geo_units_f_op2345, _ = calculate_incidents_metrics(
             calculate_incidents_with_gis_travel_time(op=option), demo_label='income',
         )
-        reg_model = reg.reg_spatial_lag(geo_units_f_op2345, w_lag=1, method='ML', weight_method='Queen',)
+        reg_model = reg.reg_spatial_lag(geo_units_f_op2345, w_lag=1, weight_method='Queen',)
         reg.reg_shift_test_bootstrapping(
             geo_units_f_op1, geo_units_f_op2345,'ML', weight_method='Queen', w_lag=1,
             n_iter=5000,
@@ -752,7 +752,7 @@ if __name__ == "__main__":
             ['real', 'sota', 'ours']
     ):
         reg_model = reg.reg_spatial_lag(
-            op, w_lag=1, method='ML', weight_method='Queen', y=y,
+            op, w_lag=1, weight_method='Queen', y=y,
         )
         vis.scatter_demo_vs_error(
             op,  color='#235689', col_error=y,

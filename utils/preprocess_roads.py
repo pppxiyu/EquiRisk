@@ -6,6 +6,15 @@ import rasterio
 
 
 def pull_roads_osm(city, city_abbr, folder, filter):
+    """
+    Download and save OSM road network data for a city using OSMnx.
+
+    Args:
+        city (str or tuple): City name or bounding box for OSMnx.
+        city_abbr (str): Abbreviation for the city (used in filenames).
+        folder (str): Directory to save the output files.
+        filter (str): OSM filter string for road types.
+    """
     import osmnx as ox
     import networkx as nx
 
@@ -36,6 +45,16 @@ def pull_roads_osm(city, city_abbr, folder, filter):
 
 
 def import_roads_osm(folder, city_abbr):
+    """
+    Import OSM road network data (nodes, edges, and graph) from files.
+
+    Args:
+        folder (str): Directory containing the OSM files.
+        city_abbr (str): Abbreviation for the city (used in filenames).
+
+    Returns:
+        tuple: (graph, gdf_edges, gdf_nodes)
+    """
     import networkx as nx
 
     gdf_nodes = gpd.read_file(f"{folder}/road_intersection_{city_abbr}.geojson")
@@ -45,12 +64,32 @@ def import_roads_osm(folder, city_abbr):
 
 
 def add_roads_max_speed(gdf, speed, maxspeed_name):
+    """
+    Assign maximum speed to each road segment based on its highway type.
+
+    Args:
+        gdf (GeoDataFrame): Road segments.
+        speed (dict): Mapping from highway type to speed.
+        maxspeed_name (str): Name of the new column for max speed.
+
+    Returns:
+        GeoDataFrame: Road segments with max speed assigned.
+    """
     gdf[maxspeed_name] = gdf['highway'].map(speed)
     assert gdf['highway'].isna().any() == False, 'Speed was not assigned to all roads.'
     return gdf
 
 
 def import_turn_restriction(addr):
+    """
+    Import and process turn restriction data from a GeoJSON file.
+
+    Args:
+        addr (str): Path to the turn restriction GeoJSON file.
+
+    Returns:
+        DataFrame: Processed turn restriction data.
+    """
     import ast
 
     gdf = gpd.read_file(addr)
@@ -121,6 +160,15 @@ def import_turn_restriction(addr):
 
 
 def import_bridge_tunnel(addr):
+    """
+    Import bridge and tunnel data from a GeoJSON file.
+
+    Args:
+        addr (str): Path to the bridge/tunnel GeoJSON file.
+
+    Returns:
+        DataFrame: Processed bridge/tunnel data.
+    """
     gdf = gpd.read_file(addr)
     gdf['id'] = gdf['id'].str.split('/').str[1]
     gdf = gdf[['id', 'highway']]
@@ -128,6 +176,17 @@ def import_bridge_tunnel(addr):
 
 
 def add_travel_time_2_seg(roads, maxspeed_name, travel_time_name):
+    """
+    Calculate travel time for each road segment based on its length and max speed.
+
+    Args:
+        roads (GeoDataFrame): Road segments.
+        maxspeed_name (str): Column name for max speed.
+        travel_time_name (str): Name of the new column for travel time.
+
+    Returns:
+        GeoDataFrame: Road segments with travel time assigned.
+    """
     # input('For add_travel_time_2_seg, input speed is mile/h, and output time is seconds.')
     roads['maxspeed_assigned_m_per_s'] = roads[maxspeed_name] * 1.60934 * 1000 / 60 / 60
     roads[travel_time_name] = roads['length'] / roads['maxspeed_assigned_m_per_s']
@@ -139,6 +198,21 @@ def add_water_depth_on_roads_w_bridge(
         remove_bridge=True,
         remove_inundation_under_bridge=False, geo_w_bridge=None,
 ):
+    """
+    Add water depth information to road segments, considering bridges and inundation.
+
+    Args:
+        roads (GeoDataFrame): Road segments.
+        inundation_tif_addr (str): Path to the inundation raster file.
+        label (int or str): Label for the inundation period.
+        new_col_name (dict): Mapping for new columns (e.g., {'max': 'max_depth', 'mean': 'mean_depth'}).
+        remove_bridge (bool): Whether to remove bridge segments from inundation.
+        remove_inundation_under_bridge (bool): Remove inundation under bridges.
+        geo_w_bridge (GeoDataFrame, optional): Road segments with bridge info.
+
+    Returns:
+        GeoDataFrame: Road segments with water depth columns added.
+    """
     from rasterio.features import shapes
     import warnings
 
@@ -208,6 +282,18 @@ def add_water_depth_on_roads_w_bridge(
 
 
 def get_water_depth(roads, polygons,new_col_name, label):
+    """
+    Calculate max and mean water depth for each road segment based on inundation polygons.
+
+    Args:
+        roads (GeoDataFrame): Road segments.
+        polygons (GeoDataFrame): Inundation polygons.
+        new_col_name (dict): Mapping for new columns.
+        label (int or str): Label for the inundation period.
+
+    Returns:
+        GeoDataFrame: Road segments with water depth columns added.
+    """
     inundated_roads = roads.copy().sjoin(polygons, how='inner', predicate='intersects')
 
     inundated_roads_max = inundated_roads[['val']].groupby(inundated_roads.index).max()
@@ -221,6 +307,17 @@ def get_water_depth(roads, polygons,new_col_name, label):
 
 
 def get_overhead_bridge(bridge_geo, non_bridge_geo, plot=True):
+    """
+    Identify overhead bridges by checking which bridges cross non-bridge roads.
+
+    Args:
+        bridge_geo (GeoDataFrame): Bridge road segments.
+        non_bridge_geo (GeoDataFrame): Non-bridge road segments.
+        plot (bool): Whether to plot the results for visual inspection.
+
+    Returns:
+        list: Indices of overhead bridges.
+    """
     if plot:
         import matplotlib.pyplot as plt
     overhead_bridge_list = []
@@ -238,6 +335,18 @@ def get_overhead_bridge(bridge_geo, non_bridge_geo, plot=True):
 
 
 def get_corresponding_road(road, roads, top=1, bf=10):
+    """
+    Find the corresponding road(s) in a set of roads for a given road segment.
+
+    Args:
+        road (GeoDataFrame): Single road segment.
+        roads (GeoDataFrame): All road segments.
+        top (int): Number of top matches to return.
+        bf (float): Buffer size for spatial join.
+
+    Returns:
+        DataFrame: Candidate matching road segments.
+    """
     assert isinstance(road, gpd.GeoDataFrame)
     assert isinstance(roads, gpd.GeoDataFrame)
     assert len(road) == 1
