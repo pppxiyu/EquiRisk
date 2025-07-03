@@ -3,11 +3,8 @@ import utils.preprocess_roads as pp_r
 import utils.preprocess_incidents as pp_i
 import utils.preprocess_graph as pp_g
 import model as mo
-import utils.visualization as vis
-import utils.regression as reg
 from config_vb import *
 import geopandas as gpd
-import os
 
 def pull_road_data_osm():
     pp_r.pull_roads_osm(
@@ -305,95 +302,5 @@ if __name__ == "__main__":
     #     dir_road_cube7, dir_road_cube7_inundated, updated_nets, period_split,
     #     'cubedb__Master_Network_CUBE7__link',
     # )
-
-    ###### Results 3
-
-
-
-
-
-
-    #####
-
-
-
-
-    ###### Other vis
-    incidents = calculate_incidents_with_gis_travel_time(op=1)
-    _, _, _, geo_units, _ = calculate_incidents_metrics(incidents, 'income')
-    # vis.map_error(geo_units, dir_bg_boundaries, 'diff_travel', exclude_idx=[5293, 698],)
-    vis.map_geo_only(
-        geo_units, dir_bg_boundaries, 'diff_travel', 'Estimation<br>error (s)', 'error',
-        exclude_idx=[5293, 698], color_scale='RdBu', color_range=[-1400, 1400],
-        geo_range=[-76.227827, 36.712386, -75.933628, 36.931997], legend_top=0.92
-    )
-
-    _, _, demo, _, _ = calculate_incidents_metrics(
-        calculate_incidents_with_gis_travel_time(op=1),
-        'age'
-    )
-    vis.map_demographic_geo_only(
-        demo, dir_bg_boundaries,
-        # 'demographic_value', 'Median house income<br>(US dollar)', '_demographic_income',
-        # 'demographic_value', 'Percent Bachelor\'s<br>degree and higher', '_demographic_edu',
-        # 'demographic_value', 'Percent non-minority', '_demographic_minority',
-        'demographic_value', 'Percent population<br>aged 5-65', '_demographic_age',
-        exclude_idx=[5293, 698],
-    )
-
-    vis.line_cut_n_ave_wellness(
-        geo_units_normal,
-        [round(x * 0.05, 2) for x in range(2, 11)],
-        'range',
-    )
-
-    # accuracy metrics:
-    for option in [1, 2, 3, 4, 5]:  # 1-no adaptation, 2-origin; 3-daily traffic; 4-flood congestion; 5-all
-        print(f'Analysis for Option {option}.')
-        incidents_f, incidents_n, _, _, _ = calculate_incidents_metrics(
-            calculate_incidents_with_gis_travel_time(op=option), demo_label='income',
-        )
-        if option == 1:
-            print(
-                f"Original method normal time: "
-                f"MAE_{vis.calculate_mae(incidents_n, 'TravelTime', 'Total_Seconds'):.2f} "
-                f"MAPE_{vis.calculate_mape(incidents_n, 'TravelTime', 'Total_Seconds'):.2f} "
-                f"RMSE_{vis.calculate_rmse(incidents_n, 'TravelTime', 'Total_Seconds'):.2f} "
-                f"BIAS_{vis.calculate_bias(incidents_n, 'TravelTime', 'Total_Seconds'):.2f} "
-            )
-        print(
-            f"Method option {option} flooding time: "
-            f"MAE_{vis.calculate_mae(incidents_f, 'TravelTime', 'Total_Seconds'):.2f} "
-            f"MAPE_{vis.calculate_mape(incidents_f, 'TravelTime', 'Total_Seconds'):.2f} "
-            f"RMSE_{vis.calculate_rmse(incidents_f, 'TravelTime', 'Total_Seconds'):.2f} "
-            f"BIAS_{vis.calculate_bias(incidents_f, 'TravelTime', 'Total_Seconds'):.2f} "
-        )
-
-    # risk equity
-    _, _, _, geo_units_f_op1, _ = calculate_incidents_metrics(
-        calculate_incidents_with_gis_travel_time(op=1), demo_label='income',
-    )
-    _, _, _, geo_units_f_op5, _ = calculate_incidents_metrics(
-        calculate_incidents_with_gis_travel_time(op=5), demo_label='income',
-    )
-    for y, op, l in zip(
-            ['TravelTime', 'Total_Seconds', 'Total_Seconds'],
-            [geo_units_f_op1, geo_units_f_op1, geo_units_f_op5],
-            ['real', 'sota', 'ours']
-    ):
-        reg_model = reg.reg_spatial_lag(
-            op, w_lag=1, method='ML', weight_method='Queen', y=y,
-        )
-        vis.scatter_demo_vs_error(
-            op,  color='#235689', col_error=y,
-            reg_line=[reg_model.betas[1, 0], reg_model.betas[0, 0]],
-            xaxis='Median household income (USD)', yaxis='Travel time', yrange=[-100, 2500],
-            save_label=l, target_label='risk'
-        )
-
-
-
-
-    ########
 
     print('End of the program.')
