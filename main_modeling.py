@@ -7,6 +7,17 @@ from config_vb import *
 import geopandas as gpd
 
 def pull_road_data_osm():
+    """
+    Download and save OpenStreetMap road network data for Virginia Beach.
+    
+    Uses the OSMnx library to pull road data for the specified city and save it
+    to the configured road folder. Filters for major road types including motorways,
+    trunks, primary, secondary, tertiary, unclassified, residential, and service roads.
+    
+    Dependencies:
+        - config_vb: city_name, dir_road_folder
+        - utils.preprocess_roads: pull_roads_osm
+    """
     pp_r.pull_roads_osm(
         city_name[0], city_name[1], dir_road_folder,
         '"motorway|trunk|primary|secondary|tertiary|unclassified|residential|service"',
@@ -14,6 +25,15 @@ def pull_road_data_osm():
 
 
 def pull_geocode_incident():
+    """
+    Geocode incident addresses and save the results.
+    
+    Processes raw incident data by geocoding addresses and saving the results
+    to a GeoJSON file. This function is used for initial data preparation.
+    
+    Dependencies:
+        - utils.preprocess_incidents: geocode_incident
+    """
     # geocode incidents data ans save it
     pp_i.geocode_incident(
         './data/incidents/virginiaBeach_ambulance_timeData.csv',
@@ -23,6 +43,17 @@ def pull_geocode_incident():
 
 
 def save_inundated_roads():
+    """
+    Add water depth information to road segments and save the inundated road network.
+    
+    Processes road segments by adding water depth data from inundation raster files
+    for each time period (25-48). The function handles bridge considerations and
+    saves the result to the configured inundated road file.
+    
+    Dependencies:
+        - config_vb: dir_road, dir_road_inundated
+        - utils.preprocess_roads: add_water_depth_on_roads_w_bridge
+    """
     # overlapping the inundation and roads and save it
     road_segment = gpd.read_file(dir_road)
     for i in range(25, 48 + 1):
@@ -35,6 +66,17 @@ def save_inundated_roads():
 
 
 def save_inundated_roads_4_sim():
+    """
+    Create inundated road network for simulation purposes.
+    
+    Similar to save_inundated_roads() but specifically for simulation data.
+    Handles bridge removal and inundation under bridges differently than the
+    main road network. Only creates the file if it doesn't already exist.
+    
+    Dependencies:
+        - config_vb: dir_road, dir_road_cube6, dir_road_cube6_inundated
+        - utils.preprocess_roads: add_water_depth_on_roads_w_bridge
+    """
     import os
     if not os.path.exists(dir_road_cube6_inundated):
         road_segment = gpd.read_file(dir_road)
@@ -52,6 +94,17 @@ def save_inundated_roads_4_sim():
 
 
 def save_rescue_data():
+    """
+    Process and save rescue station data with geographic information.
+    
+    Imports rescue station data and saves it to the configured location.
+    This function prepares rescue station data for use in routing analysis.
+    Note: Nearest segment and intersection calculations are commented out.
+    
+    Dependencies:
+        - config_vb: dir_rescue_station, dir_rescue_station_n_nearest_geo
+        - utils.preprocess_station: import_rescue_station
+    """
     # process rescue station data and save it
     # road_intersection = gpd.read_file(f"data/VB/roads/road_intersection_vb.geojson")
     # road_segment = gpd.read_file(dir_road)
@@ -67,6 +120,17 @@ def save_rescue_data():
 
 
 def match_osm_n_vdot():
+    """
+    Match OpenStreetMap road data with VDOT (Virginia Department of Transportation) data.
+    
+    Creates a matching between OSM road segments and VDOT road network data.
+    This matching is essential for incorporating VDOT traffic information into
+    the OSM-based road network.
+    
+    Dependencies:
+        - config_vb: dir_road_inundated, dir_road_cube6, dir_match_osm_n_VDOT, dir_road_cube6_out_c
+        - utils.preprocess_roads: match_osm_n_VDOT
+    """
     pp_r.match_osm_n_VDOT(
         dir_road_inundated, dir_road_cube6, dir_match_osm_n_VDOT,
         dir_VDOT_info=f'{dir_road_cube6_out_c}/AM_PK_FDBKNET_LINK.dbf',
@@ -74,6 +138,26 @@ def match_osm_n_vdot():
 
 
 def build_full_graph_arcgis():
+    """
+    Build a complete ArcGIS network dataset with turn restrictions and travel modes.
+    
+    Creates a comprehensive network dataset in ArcGIS that includes:
+    - Road segments with inundation information
+    - Turn restrictions
+    - Travel modes and cost attributes
+    - Network topology
+    
+    This function requires manual intervention in ArcGIS to configure travel modes
+    and network properties. It sets up the foundation for all routing analyses.
+    
+    Dependencies:
+        - config_vb: geodatabase_addr, fd_name, nd_name, turn_name, dir_road_inundated, 
+                     dir_turn, speed_assigned
+        - utils.preprocess_roads: import_road_seg_w_inundation_info, import_turn_restriction
+        - utils.preprocess_graph: build_feature_dataset_arcgis, build_network_dataset_arcgis, 
+                                 add_turn_restriction_arcgis
+        - model: RouteAnalysis, ServiceAreaAnalysis
+    """
     import arcpy
 
     road_segment = pp_r.import_road_seg_w_inundation_info(dir_road_inundated, speed_assigned)
@@ -142,6 +226,32 @@ def build_full_graph_arcgis():
 
 
 def calculate_all_routes(op):
+    """
+    Calculate routes for all incidents under different operational scenarios.
+    
+    This function implements different routing strategies for emergency response:
+    - OP0: Normal conditions (baseline)
+    - OP1: Nearest origin assignment
+    - OP2: Real origin assignment (actual ambulance locations)
+    - OP3: Everyday congestion conditions
+    - OP4: Flooding congestion conditions
+    - OP5: Combined congestion and origin shift
+    
+    Each option uses different combinations of:
+    - Origin assignment methods (nearest vs. real)
+    - Traffic conditions (normal vs. congested)
+    - VDOT speed data integration
+    
+    Args:
+        op (int): Operation mode (0-5) specifying the routing scenario.
+        
+    Dependencies:
+        - config_vb: All directory paths and configuration parameters
+        - utils.preprocess_station: import_rescue_station
+        - utils.preprocess_incidents: import_incidents_add_info
+        - utils.preprocess_roads: import_road_seg_w_inundation_info, merge_road_info_VDOT
+        - model: RouteAnalysis
+    """
     rescue_sta = pp_s.import_rescue_station(dir_rescue_station_n_nearest_geo)
     icd = pp_i.import_incidents_add_info(
         dir_incidents, rescue_sta, period_dict, routing_nearest=dir_incidents_routing_nearest,
