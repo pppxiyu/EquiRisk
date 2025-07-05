@@ -68,7 +68,7 @@ please place your Mapbox token in a plain text file named `mapboxToken.txt`.
 - simpledbf (for function merge_road_info_VDOT only)
 
 ## Data
- The data folder 
+The data folder 
 used in the study is deposited on the author's
 [Google Drive](https://drive.google.com/drive/folders/1mxyiUylxluWH87xTQuYMZmrEDUn3v0rs?usp=sharing) 
 currently and open for public use. Please organize the data
