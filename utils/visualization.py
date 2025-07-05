@@ -1199,6 +1199,90 @@ def scatter_income_vs_congestion(df_list_d, df_list_c, mode='disrupted_net', exp
     return
 
 
+def box_income_vs_congestion(df_list_d, df_list_c, mode='disrupted_net',):
+    import pandas as pd
+    import numpy as np
+
+    if mode == 'disrupted_net':
+        df = pd.concat(df_list_d, axis=0, ignore_index=True)
+    elif mode == 'complete_net':
+        df = pd.concat(df_list_c, axis=0, ignore_index=True)
+
+    df['congestion'] = df['congestion'] * 100
+    df['income_k'] = df['income'] / 1000
+
+    income_min = df['income_k'].min()
+    income_max = df['income_k'].max()
+    bin_start = int(np.floor(income_min / 10) * 10)
+    bin_end = int(np.ceil(income_max / 10) * 10)
+    interval = 20
+    bin_edges = np.arange(bin_start, bin_end + interval, interval)
+
+    df['income_k_bin'] = pd.cut(df['income_k'], bins=bin_edges)
+    df['income_k_mid'] = df['income_k_bin'].apply(lambda x: (x.left + x.right) / 2)
+
+    fig = px.box(
+        df, x='income_k_mid', y='congestion', points='outliers',
+        labels={'income_k_mid': 'Median household income (thousand USD)',
+                'congestion': 'Travel time increase (%)'}
+    )
+    tick_vals = bin_edges
+    tick_texts = [str(int(val)) for val in tick_vals]
+    fig.update_layout(
+        xaxis=dict(
+            tickvals=tick_vals,
+            ticktext=tick_texts,
+            title=f'Median household<br>income (1,000 USD)',
+            showline=True,
+            linewidth=2,
+            linecolor='black',
+            showgrid=False,
+            ticks='outside',
+            tickformat=',',
+            zeroline=False,
+            range=[10, 190]
+        ),
+        yaxis=dict(
+            title=dict(
+                text='Travel time increase (%)',
+                standoff=0
+            ),
+            showline=True,
+            linewidth=2,
+            linecolor='black',
+            showgrid=False,
+            ticks='outside',
+            tickformat=',',
+            zeroline=False,
+            range=[-5, 205]
+        ),
+        font=dict(family="Arial", size=18, color="black"),
+        legend=dict(
+            x=0.5, y=1.2, xanchor="center", yanchor="middle", title_text=None,
+            font=dict(size=18), orientation="h", itemwidth=30,
+        ),
+        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+        width=300, height=600,
+        margin=dict(l=50, r=50, t=50, b=50)
+    )
+    for trace in fig.data:
+        if trace.type == 'box':
+            trace.line.width = 1
+            trace.marker.size = 4
+            trace.marker.color = '#992F87'
+            trace.fillcolor = '#C9A2C6'
+            trace.line.color = '#992F87'
+            trace.width = 16
+
+    # fig.show(renderer="browser")
+    fig.show(renderer="notebook")
+    # fig.write_image(
+    #     f"./manuscripts/figs/box_income_congestion_{mode}.png", engine="orca",
+    #     width=300, height=600, scale=3.125
+    # )
+    return
+
+
 def bar_per_non_nearest(per_1, per_2):
     fig = go.Figure(data=[
         go.Bar(
@@ -1531,6 +1615,108 @@ def scatter_inundation_severity_vs_congestion(
             #     f"./manuscripts/figs/scatter_congestion_inundation_{n}.png", engine="orca",
             #     width=600, height=250, scale=3.125
             # )
+    return
+
+
+def box_inundation_severity_vs_congestion(
+        inundation, congestion_container, block_group,
+):
+    import pandas as pd
+    import numpy as np
+
+    def format_float(val):
+        if val == 0.0:
+            return "0"
+        elif val == 1.0:
+            return "1"
+        else:
+            return f"{val:.1f}".lstrip("0")
+
+    congestion = congestion_container[0] - congestion_container[1]
+    congestion['income'] = congestion_container[0]['income']
+    congestion = congestion[~congestion.isna().any(axis=1)]
+    inundation = inundation[~inundation.isna().any(axis=1)]
+
+    congestion_melt = pd.melt(
+        congestion.reset_index(), id_vars=['id', 'income'], value_vars=['AM_PK', 'Md_OP', 'PM_PK', 'Nt_OP'],
+        var_name='period', value_name='congestion'
+    )
+    inundation_melt = pd.melt(
+        inundation.reset_index(), id_vars=['id', 'income'], value_vars=['AM_PK', 'Md_OP', 'PM_PK', 'Nt_OP'],
+        var_name='period', value_name='inundation'
+    )
+    combined = congestion_melt.merge(inundation_melt, on=['id', 'period'], how='inner')
+    replacements = [('AM_PK', 'AM Peak'), ('Md_OP', 'Midday'), ('PM_PK', 'PM Peak'), ('Nt_OP', 'Night')]
+    for old, new in replacements:
+        combined['period'] = combined['period'].str.replace(old, new)
+
+    # vis
+    interval = 0.1
+    bin_edges = np.arange(0, 1 + interval, interval)
+
+    combined['inundation_bin'] = pd.cut(combined['inundation'], bins=10)
+    combined['inundation_mid'] = combined['inundation_bin'].apply(lambda x: (x.left + x.right) / 2)
+
+    fig = px.box(
+        combined, x='inundation_mid', y='congestion', points='outliers',
+        labels={'inundation_mid': 'Road inundation severity',
+                'congestion': 'Travel time increase (%)'}
+    )
+    tick_vals = bin_edges
+    tick_texts = [str(format_float(val)) for val in tick_vals]
+    fig.update_layout(
+        xaxis=dict(
+            tickvals=tick_vals,
+            ticktext=tick_texts,
+            title=f'Road inundation<br>severity',
+            showline=True,
+            linewidth=2,
+            linecolor='black',
+            showgrid=False,
+            ticks='outside',
+            tickformat=',',
+            zeroline=False,
+            # range=[-0.05, 0.95]
+        ),
+        yaxis=dict(
+            title=dict(
+                text='Travel time increase (%)',
+                standoff=0
+            ),
+            showline=True,
+            linewidth=2,
+            linecolor='black',
+            showgrid=False,
+            ticks='outside',
+            tickformat=',',
+            zeroline=False,
+            range=[-.75, 1.75]
+        ),
+        font=dict(family="Arial", size=18, color="black"),
+        legend=dict(
+            x=0.5, y=1.2, xanchor="center", yanchor="middle", title_text=None,
+            font=dict(size=18), orientation="h", itemwidth=30,
+        ),
+        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+        width=350, height=600,
+        margin=dict(l=50, r=50, t=50, b=50)
+    )
+    for trace in fig.data:
+        if trace.type == 'box':
+            trace.line.width = 1
+            trace.marker.size = 4
+            trace.marker.color = '#55759E'
+            trace.fillcolor = '#A5CFE3'
+            trace.line.color = '#55759E'
+            trace.width = 0.08
+
+    # fig.show(renderer="browser")
+    fig.show(renderer="notebook")
+    # fig.write_image(
+    #     f"./manuscripts/figs/box_congestion_inundation.png", engine="orca",
+    #     width=350, height=600, scale=3.125
+    # )
+
     return
 
 
