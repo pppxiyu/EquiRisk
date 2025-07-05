@@ -6,6 +6,7 @@ import model as mo
 from config_vb import *
 import geopandas as gpd
 
+
 def pull_road_data_osm():
     """
     Download and save OpenStreetMap road network data for Virginia Beach.
