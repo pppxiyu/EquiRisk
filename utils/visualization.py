@@ -1810,6 +1810,53 @@ def map_inundation_severity_and_congestion(inundation, congestion_list, block_gr
     return
 
 
+def line_modeling_n_usgs(df, save_label):
+    import pandas as pd
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=df.index,
+        y=df['usgs_depth'],
+        mode='lines',
+        name='USGS sensing',
+        line=dict(width=2, color='#42BCB2')
+    ))
+    fig.add_trace(go.Scatter(
+        x=df.index,
+        y=df['estimate_depth'],
+        mode='lines',
+        name='Flood modeling',
+        line=dict(width=2, color='#235689')
+    ))
+    fig.update_layout(
+        xaxis=dict(
+            title='Time (EDT)',
+            showline=True, linewidth=2, linecolor='black', showgrid=False,
+            ticks='outside', zeroline=False,
+            range=[df.index.min() - pd.Timedelta(hours=1), df.index.max() + pd.Timedelta(hours=1)]
+        ),
+        yaxis=dict(
+            title='Water level (NAVD 88)',
+            showline=True, linewidth=2, linecolor='black', showgrid=False,
+            ticks='outside', tickformat=',', zeroline=False,
+            range = [0, 10]
+        ),
+        font=dict(family="Arial", size=18, color="black"),
+        legend=dict(
+            font=dict(size=16), traceorder="normal",
+            orientation="h", yanchor="bottom", xanchor="center", y=1.05, x=0.5,
+        ),
+        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+        width=650, height=300,
+        margin=dict(l=50, r=50, t=50, b=50)
+    )
+    fig.show(renderer="browser")
+    fig.write_image(
+        f"./manuscripts/figs/line_usgs_n_modeling_{save_label}_.png", engine="orca",
+        width=650, height=300, scale=3.125
+    )
+
+
 def calculate_mae(df, col_actual, col_predicted):
     import numpy as np
     mae = np.mean(np.abs(df[col_actual] - df[col_predicted]))

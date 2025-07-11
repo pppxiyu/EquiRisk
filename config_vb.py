@@ -63,3 +63,14 @@ dir_road_inundated = "data/VB/roads/road_segment_vb_inundated.geojson"
 dir_road_cube6 = 'data/VB/HR_Model_V2_04302024/trueshp/HR_Model_trueshp08022022.shp'
 dir_road_cube6_out_c = 'data/VB/HR_Model_V2_04302024/dbf_output/complete_net'
 dir_road_cube6_out_d = 'data/VB/HR_Model_V2_04302024/dbf_output/disrupted_net'
+
+dir_USGS_gauging = [
+    'data/VB/inundation/USGS_sensing/02043155_20161008_20161009.txt',
+    'data/VB/inundation/USGS_sensing/0204291317_20161008_20161009.txt',
+    'data/VB/inundation/USGS_sensing/0204293125_20161008_20161009.txt',
+]
+dir_flood_depth = [
+    {'file': 'data/VB/inundation/USGS_sensing/02043155_flood_modeling.txt', 'offset': -1.2838188976, 'name': '02043155'},
+    {'file': 'data/VB/inundation/USGS_sensing/0204291317_flood_modeling.txt', 'offset': 3.28084, 'name': '0204291317'},
+    {'file': 'data/VB/inundation/USGS_sensing/0204293125_flood_modeling.txt', 'offset': 3.28084, 'name': '0204293125'},
+]
