@@ -37,9 +37,9 @@ def pull_geocode_incident():
     """
     # geocode incidents data ans save it
     pp_i.geocode_incident(
-        './data/incidents/virginiaBeach_ambulance_timeData.csv',
+        './data/VB/incidents/virginiaBeach_ambulance_timeData.csv',
         ['2013-01-01', '2013-01-02'],
-        './data/incidents/geocoded/20130101-20130102.geojson',
+        './data/VB/incidents/geocoded/20130101-20130102.csv',
     )
 
 
@@ -400,8 +400,7 @@ if __name__ == "__main__":
     #     road_segment, if_do_normal=True, if_do_flood=True,
     # )
 
-    #######
-    # ###### Other data processing: edit the net in CUBE
+    # edit the net in CUBE
     # save_inundated_roads_4_sim()
     #
     # nets = pp_r.merge_inundation_info_2_net(
