@@ -266,6 +266,41 @@ def add_nearest_rescue_station(incident, rescue, routing_nearest=None, mode='rou
             on=['Call Date and Time', 'Entry Date and Time', 'Dispatch Date and Time'],
         )
         assert len(incident) == len(incident_new), "DFs are inconsistent after merge."
+    elif mode == 'routing_by_origin':
+        import pandas as pd
+        from shapely.geometry import Point
+
+        nearest_station = pd.read_csv(routing_nearest)
+
+        incident_new = incident.merge(
+            nearest_station[['IncidentAddress', 'Number']].drop_duplicates(),
+            how='left', suffixes=('_actual', '_nearest'),
+            left_on='Address', right_on='IncidentAddress',
+        )
+        incident_new['geometry'] = incident.geometry.copy()
+        incident_new = incident_new.set_geometry('geometry')
+        assert len(incident) == len(incident_new), "DFs are inconsistent after merge."
+
+        missing = incident_new[incident_new['Number_nearest'].isna()].copy()
+        missing = missing.reset_index()
+        missing_adj_ict = missing.copy()
+        for idx, incident_row in missing.iterrows():
+            distances = rescue.geometry.distance(incident_row.geometry)
+            nearest = distances.nsmallest(2)
+            first_distance, second_distance = nearest.values
+            first_idx, _ = nearest.index
+            first_number = rescue.loc[first_idx, 'Number']
+            if second_distance - first_distance > 100:
+                missing_adj_ict.loc[idx, 'Number_nearest'] = first_number
+        for _, row in missing.iterrows():
+            incident_new.loc[row['index'], 'Number_nearest'] = missing_adj_ict.loc[
+                missing_adj_ict['index'] == row['index'], 'Number_nearest'
+            ].values[0]
+
+        # print(f"{len(incident_new[incident_new['Number_nearest'].isna()])} missing from {len(incident_new)}")
+        incident_new = incident_new[~incident_new['Number_nearest'].isna()]
+        incident_new = incident_new.to_crs(original_crs)
+
     else:
         raise ValueError(f'Mode not specified')
     return incident_new

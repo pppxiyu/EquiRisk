@@ -64,6 +64,7 @@ dir_road_cube6 = 'data/VB/HR_Model_V2_04302024/trueshp/HR_Model_trueshp08022022.
 dir_road_cube6_out_c = 'data/VB/HR_Model_V2_04302024/dbf_output/complete_net'
 dir_road_cube6_out_d = 'data/VB/HR_Model_V2_04302024/dbf_output/disrupted_net'
 
+# additional analysis
 dir_USGS_gauging = [
     'data/VB/inundation/USGS_sensing/02043155_20161008_20161009.txt',
     'data/VB/inundation/USGS_sensing/0204291317_20161008_20161009.txt',
@@ -74,3 +75,13 @@ dir_flood_depth = [
     {'file': 'data/VB/inundation/USGS_sensing/0204291317_flood_modeling.txt', 'offset': 3.28084, 'name': '0204291317'},
     {'file': 'data/VB/inundation/USGS_sensing/0204293125_flood_modeling.txt', 'offset': 3.28084, 'name': '0204293125'},
 ]
+dir_historical_hurricanes = 'data/VB/inundation/historical_hurricanes_no_matthew.txt'
+dir_historical_hurricanes_incidents = {
+    'Matthew 2016': 'data/VB/incidents/geocoded/20161008-20161010.csv',
+    'Hermine 2016': 'data/VB/incidents/geocoded/20160831-20160907.csv',
+    'Arthur 2014': 'data/VB/incidents/geocoded/20140630-20140708.csv',
+    'Beryl 2012': 'data/VB/incidents/geocoded/20120527-20120603.csv',
+    'Irene 2011': 'data/VB/incidents/geocoded/20110824-20110831.csv',
+    'Earl 2010': 'data/VB/incidents/geocoded/20100830-20100907.csv',
+}
+

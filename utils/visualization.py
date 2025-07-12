@@ -1857,6 +1857,76 @@ def line_modeling_n_usgs(df, save_label):
     )
 
 
+def box_nearest_violation_income(hurricane_info: dict):
+    import pandas as pd
+
+    hurricane_info = dict(reversed(list(hurricane_info.items())))
+    rows = []
+    for hurricane, categories in hurricane_info.items():
+        for label, series in categories.items():
+            for value in series:
+                rows.append({'Hurricane': hurricane, 'Category': label, 'Value': value})
+    df_box = pd.DataFrame(rows)
+    df_box['Hurricane'] = df_box['Hurricane'].str.replace(' ', '<br>')
+    df_box['Category'] = df_box['Category'].replace({
+        'nearest': 'Nearest',
+        'violated': 'Not nearest'
+    })
+
+    fig = px.box(
+        df_box,
+        x='Hurricane',
+        y='Value',
+        color='Category',
+        points='outliers',
+        labels={'Value': 'Demographic Value'},
+        category_orders={'Category': ['Nearest', 'Not nearest']},
+        color_discrete_sequence=['#1B91BF', '#235689']
+    )
+    fig.update_layout(
+        xaxis=dict(
+            title=f'Hurricanes',
+            showline=True,
+            linewidth=2,
+            linecolor='black',
+            showgrid=False,
+            ticks='outside',
+            tickformat=',',
+            zeroline=False,
+        ),
+        yaxis=dict(
+            title=dict(
+                text='Average median<br>household income (USD)',
+                standoff=0
+            ),
+            showline=True,
+            linewidth=2,
+            linecolor='black',
+            showgrid=False,
+            ticks='outside',
+            tickformat=',',
+            zeroline=False,
+        ),
+        font=dict(family="Arial", size=18, color="black"),
+        legend=dict(
+            x=0.5, y=1.1, xanchor="center", yanchor="middle", title_text=None,
+            font=dict(size=18), orientation="h", itemwidth=30,
+        ),
+        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+        width=800, height=450,
+        margin=dict(l=50, r=50, t=50, b=50)
+    )
+
+    # fig.show(renderer="browser")
+    fig.show(renderer="notebook")
+    # fig.write_image(
+    #     f"./manuscripts/figs/box_income_disparity_violation_hurricanes.png", engine="orca",
+    #     width=800, height=450, scale=3.125
+    # )
+
+    return
+
+
 def calculate_mae(df, col_actual, col_predicted):
     import numpy as np
     mae = np.mean(np.abs(df[col_actual] - df[col_predicted]))
