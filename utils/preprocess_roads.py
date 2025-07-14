@@ -4,6 +4,8 @@ import numpy as np
 import warnings
 import rasterio
 
+from config_vb import period_split
+
 
 def pull_roads_osm(city, city_abbr, folder, filter):
     """
@@ -1072,3 +1074,97 @@ def get_congestion_metrics(dir_road, period_short, dir_road_cube6, dir_bg_bounda
 
     return metrics_df_list
 
+
+def process_cube_gdf_speed(df, length_col, time_col, bins_count):
+    speed_column = df[length_col] / df[time_col] * 60
+    assert not speed_column.isna().any(), 'nan value'
+    speed_column[speed_column <= 1e-1] = 0
+    speed_column[speed_column >= 65] = speed_column[(speed_column < 65) & (speed_column > 1e-1)].median()
+    df['interval'] = pd.cut(
+        speed_column, precision=2,
+        bins=np.linspace(0, 65, bins_count + 1),
+    )
+    df['interval_name'] = df['interval'].apply(lambda x: f"{x.left}-{x.right}")
+    df = df.sort_values(by='interval')
+    df['interval_name'] = df['interval_name'].astype(str)
+    return df
+
+
+def transition_matrices(
+        df_t0, df_t1, length_col, time_col, bins_count, saved_dir
+    ):
+    """
+    Build transition matrices between the categorical speed states at t0 and t1.
+
+    Parameters
+    ----------
+    df_t0, df_t1: DataFrame containing road segment length and travel time information
+    length_col: str, name of the road segment length column
+    time_col: str, name of the road segment travel time column
+    bins_count: integer, number of bins to discretize the speed
+    Returns
+    -------
+    probs : DataFrame
+        Row-stochastic probability matrix (row sums = 1).
+    """
+
+    df_t0 = process_cube_gdf_speed(df_t0, length_col, time_col, bins_count)
+    df_t1 = process_cube_gdf_speed(df_t1, length_col, time_col, bins_count)
+    assert set(df_t0['ID'].values) == set(df_t1['ID'].values), 'IDs are inconsistent.'
+
+    df_merged = df_t0.merge(df_t1, on=["ID"], how="inner",  suffixes=('_1', '_2'))
+
+    counts = pd.crosstab(df_merged['interval_1'], df_merged['interval_2'])
+    probs = counts.div(counts.sum(axis=1).replace(0, 1), axis=0)
+    probs.to_csv(saved_dir)
+    return probs
+
+
+def get_start_label(hour):
+    for label, (start, end) in period_split.items():
+        if start < end:
+            if start <= hour < end:
+                return label
+        else:  # wrap around midnight
+            if hour >= start or hour < end:
+                return label
+    return None
+
+
+def get_label_sequence(time, p_order, label_short_map):
+    hour = time.hour
+    start_label = get_start_label(hour)
+    start_idx = p_order.index(start_label)
+    return [label_short_map[p_order[(start_idx + i) % len(p_order)]] for i in range(4)]
+
+
+def make_predict_state(p, interval_labels, *, deterministic=True):
+    """
+    Factory that returns a `predict_state(interval_label)` function.
+
+    Parameters
+    ----------
+    p : np.ndarray, shape (k, k)
+        Transition matrix for the desired fraction of the interval
+        (e.g. P^{0.5} for halfway).
+    interval_labels : list-like of str
+        The ordered labels that index P_half (rows=cols).
+    deterministic : bool, default True
+        • If True  -> returns the most-likely next state (arg-max).
+        • If False -> draws a random next state using the row probabilities.
+
+    Returns
+    -------
+    predict_state : callable
+        Signature:  predict_state(interval_label) -> str
+    """
+
+    state_to_idx = {lab: i for i, lab in enumerate(interval_labels)}
+    def predict_state(interval_label):
+        i = state_to_idx[interval_label]
+        probs = p[i]
+        if deterministic:
+            return interval_labels[int(np.argmax(probs))]
+        else:
+            return np.random.choice(interval_labels, p=probs)
+    return predict_state
