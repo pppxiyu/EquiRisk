@@ -75,7 +75,7 @@ dir_flood_depth = [
     {'file': 'data/VB/inundation/USGS_sensing/0204291317_flood_modeling.txt', 'offset': 3.28084, 'name': '0204291317'},
     {'file': 'data/VB/inundation/USGS_sensing/0204293125_flood_modeling.txt', 'offset': 3.28084, 'name': '0204293125'},
 ]
-dir_historical_hurricanes = 'data/VB/inundation/historical_hurricanes_no_matthew.txt'
+dir_historical_hurricanes = 'data/VB/inundation/historical_hurricanes.txt'
 dir_historical_hurricanes_incidents = {
     'Matthew 2016': 'data/VB/incidents/geocoded/20161008-20161010.csv',
     'Hermine 2016': 'data/VB/incidents/geocoded/20160831-20160907.csv',
@@ -84,4 +84,5 @@ dir_historical_hurricanes_incidents = {
     'Irene 2011': 'data/VB/incidents/geocoded/20110824-20110831.csv',
     'Earl 2010': 'data/VB/incidents/geocoded/20100830-20100907.csv',
 }
+dir_traffic_transition = 'data/VB/roads/transition_matrices'
 

@@ -1199,14 +1199,12 @@ def scatter_income_vs_congestion(df_list_d, df_list_c, mode='disrupted_net', exp
     return
 
 
-def box_income_vs_congestion(df_list_d, df_list_c, mode='disrupted_net',):
+def box_income_vs_congestion(df_list, y_axis_top=205, box_color='#992F87', label=None):
     import pandas as pd
     import numpy as np
 
-    if mode == 'disrupted_net':
-        df = pd.concat(df_list_d, axis=0, ignore_index=True)
-    elif mode == 'complete_net':
-        df = pd.concat(df_list_c, axis=0, ignore_index=True)
+
+    df = pd.concat(df_list, axis=0, ignore_index=True)
 
     df['congestion'] = df['congestion'] * 100
     df['income_k'] = df['income'] / 1000
@@ -1224,7 +1222,8 @@ def box_income_vs_congestion(df_list_d, df_list_c, mode='disrupted_net',):
     fig = px.box(
         df, x='income_k_mid', y='congestion', points='outliers',
         labels={'income_k_mid': 'Median household income (thousand USD)',
-                'congestion': 'Travel time increase (%)'}
+                'congestion': 'Travel time increase (%)'},
+        color_discrete_sequence=[box_color],    # ['#1B91BF', '#235689']
     )
     tick_vals = bin_edges
     tick_texts = [str(int(val)) for val in tick_vals]
@@ -1254,7 +1253,7 @@ def box_income_vs_congestion(df_list_d, df_list_c, mode='disrupted_net',):
             ticks='outside',
             tickformat=',',
             zeroline=False,
-            range=[-5, 205]
+            range=[-5, y_axis_top]
         ),
         font=dict(family="Arial", size=18, color="black"),
         legend=dict(
@@ -1269,15 +1268,12 @@ def box_income_vs_congestion(df_list_d, df_list_c, mode='disrupted_net',):
         if trace.type == 'box':
             trace.line.width = 1
             trace.marker.size = 4
-            trace.marker.color = '#992F87'
-            trace.fillcolor = '#C9A2C6'
-            trace.line.color = '#992F87'
             trace.width = 16
 
     # fig.show(renderer="browser")
     fig.show(renderer="notebook")
     # fig.write_image(
-    #     f"./manuscripts/figs/box_income_congestion_{mode}.png", engine="orca",
+    #     f"./manuscripts/figs/box_income_congestion_{label}.png", engine="orca",
     #     width=300, height=600, scale=3.125
     # )
     return
