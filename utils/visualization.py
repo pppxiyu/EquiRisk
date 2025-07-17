@@ -1846,11 +1846,12 @@ def line_modeling_n_usgs(df, save_label):
         width=650, height=300,
         margin=dict(l=50, r=50, t=50, b=50)
     )
-    fig.show(renderer="browser")
-    fig.write_image(
-        f"./manuscripts/figs/line_usgs_n_modeling_{save_label}_.png", engine="orca",
-        width=650, height=300, scale=3.125
-    )
+    # fig.show(renderer="browser")
+    fig.show(renderer="notebook")
+    # fig.write_image(
+    #     f"./manuscripts/figs/line_usgs_n_modeling_{save_label}_.png", engine="orca",
+    #     width=650, height=300, scale=3.125
+    # )
 
 
 def box_nearest_violation_income(hurricane_info: dict):
@@ -1874,7 +1875,7 @@ def box_nearest_violation_income(hurricane_info: dict):
         x='Hurricane',
         y='Value',
         color='Category',
-        points='outliers',
+        points='all',
         labels={'Value': 'Demographic Value'},
         category_orders={'Category': ['Nearest', 'Not nearest']},
         color_discrete_sequence=['#1B91BF', '#235689']
