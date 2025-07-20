@@ -322,7 +322,7 @@ class RouteAnalysis:
             inaccessible_route_save = {
                 'normal': inaccessible_route_normal, 'flood': inaccessible_route_flood_list
             }
-            with open(f'data/bch/incidents/inaccessible_route{self.mode_label}.json', 'w') as f:
+            with open(f'data/VB/incidents/inaccessible_route{self.mode_label}.json', 'w') as f:
                 json.dump(inaccessible_route_save, f)
 
 
