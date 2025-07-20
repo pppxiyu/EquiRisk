@@ -2,7 +2,7 @@ import utils.preprocess_incidents as pp_i
 from config_vb import *
 
 
-def calculate_incidents_with_gis_travel_time(op):
+def calculate_incidents_with_gis_travel_time(op, **kwargs):
     """
     Modeling results have been finished in ArcGIS. The results are read here for the following analysis.
     :param op: option of the travel time estimation setting
@@ -70,6 +70,18 @@ def calculate_incidents_with_gis_travel_time(op):
         )
         icd = pp_i.add_inaccessible_routes(
             icd, f'{dir_inaccessible_routes}_all.json'
+        )
+
+    if op == 6:
+        # OP6: sensitivity analysis by tuning road flood intensity
+        icd = pp_i.convert_feature_class_to_df(
+            icd,
+            f'{geodatabase_addr}/route_results',
+            list(range(list(period_dict.values())[0], list(period_dict.values())[1] + 1)),
+            mode_label=f"_{'p' if (tp := kwargs['tune_percent']) > 0 else 'm'}{abs(int(tp * 100))}",
+        )
+        icd = pp_i.add_inaccessible_routes(
+            icd, f"{dir_inaccessible_routes}_{'p' if (tp := kwargs['tune_percent']) > 0 else 'm'}{abs(int(tp * 100))}.json"
         )
 
     return icd

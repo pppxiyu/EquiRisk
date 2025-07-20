@@ -226,7 +226,7 @@ def build_full_graph_arcgis():
     return
 
 
-def calculate_all_routes(op):
+def calculate_all_routes(op, **kwargs):
     """
     Calculate routes for all incidents under different operational scenarios.
     
@@ -369,6 +369,20 @@ def calculate_all_routes(op):
             rescue_sta, road_segment,
         )
 
+    elif op == 6:
+        # OP6: sensitivity analysis by multiplying percentage
+        road_segment = pp_r.import_road_seg_w_inundation_info(
+            dir_road_inundated, speed_assigned, amplify=kwargs['tune_percent']
+        )
+        route_analysis = mo.RouteAnalysis(
+            icd, 'Number_nearest',
+            mode_label=f"_{'p' if (tp := kwargs['tune_percent']) > 0 else 'm'}{abs(int(tp * 100))}",
+        )
+        route_analysis.run_route_analysis_arcgis(
+            geodatabase_addr, fd_name, nd_name, nd_layer_name,
+            rescue_sta, road_segment, if_do_normal=False,
+        )
+
 
 if __name__ == "__main__":
 
@@ -378,7 +392,7 @@ if __name__ == "__main__":
         for statistical analysis. Developers can use cache data provided for the core analysis.
     """
     # pull_road_data_osm()  # save road data
-
+    #
     # save_inundated_roads()
     # save_rescue_data()
     # build_full_graph_arcgis()
@@ -400,9 +414,8 @@ if __name__ == "__main__":
     #     road_segment, if_do_normal=True, if_do_flood=True,
     # )
 
-    # edit the net in CUBE
+    ## edit the net in CUBE
     # save_inundated_roads_4_sim()
-    #
     # nets = pp_r.merge_inundation_info_2_net(
     #     dir_road_cube7, dir_road_cube6_inundated, period_dict, period_split,
     #     'cubedb__Master_Network_CUBE7__link'
@@ -412,5 +425,13 @@ if __name__ == "__main__":
     #     dir_road_cube7, dir_road_cube7_inundated, updated_nets, period_split,
     #     'cubedb__Master_Network_CUBE7__link',
     # )
+
+    # modeling for sensitivity analysis
+    # calculate_all_routes(op=6, tune_percent=.05)
+    # calculate_all_routes(op=6, tune_percent=.10)
+    # calculate_all_routes(op=6, tune_percent=.15)
+    # calculate_all_routes(op=6, tune_percent=-.05)
+    # calculate_all_routes(op=6, tune_percent=-.10)
+    # calculate_all_routes(op=6, tune_percent=-.15)
 
     print('End of the program.')

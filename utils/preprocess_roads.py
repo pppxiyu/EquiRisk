@@ -506,7 +506,9 @@ class InundationToSpeed:
 
 
 def import_road_seg_w_inundation_info(
-        dir_road_inundated, speed_assigned, VDOT_speed=None, VDOT_speed_col=None, osm_match_vdot=None
+        dir_road_inundated, speed_assigned,
+        VDOT_speed=None, VDOT_speed_col=None, osm_match_vdot=None,
+        amplify: float|None=None,
 ):
     """
     Import road segments with inundation information and calculate travel times.
@@ -522,6 +524,11 @@ def import_road_seg_w_inundation_info(
         GeoDataFrame: Road segments with inundation-adjusted travel times.
     """
     road_segment_inundation = gpd.read_file(dir_road_inundated)
+
+    if amplify is not None:
+        cols_to_multiply = road_segment_inundation.filter(regex=r'^(max|mean)_depth_\d+$').columns
+        road_segment_inundation[cols_to_multiply] = road_segment_inundation[cols_to_multiply] * (1 + amplify)
+
     road_segment_inundation = add_roads_max_speed(
         road_segment_inundation, speed_assigned,
         'maxspeed_assigned_mile'

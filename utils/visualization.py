@@ -168,6 +168,165 @@ def scatter_demo_vs_error_w_period(
     fig.show(renderer="browser")
 
 
+def line_w_shade(model_list, demo_idx, x_range):
+    import numpy as np
+
+    x_min, x_max = x_range[0], x_range[1]
+
+    coefs = np.array([[m.betas[demo_idx, 0], m.betas[0, 0]] for m in model_list])
+    slopes = coefs[:, 0][:, None]
+    intercepts = coefs[:, 1][:, None]
+
+    x_grid = np.linspace(x_min, x_max, 10)
+    x_grid_2d = x_grid[None, :]
+    y_preds = slopes * x_grid_2d + intercepts
+    y_mean = y_preds.mean(axis=0)
+
+    stdev = y_preds.std(axis=0)
+    y_lo_1, y_hi_1 = y_mean - stdev,   y_mean + stdev       # ±1 SD
+    y_lo_2, y_hi_2 = y_mean - 2*stdev, y_mean + 2*stdev     # ±2 SD
+
+    fig = go.Figure()
+    fig.add_hline(y=0, line_width=1)
+    fig = fig.add_trace(
+        go.Scatter(
+            x=x_grid,
+            y=y_mean,
+            mode='lines',
+            line=dict(dash='5px, 5px'),
+            name='Mean estimation'
+        )
+    )
+    # outer ribbon (±2 SD)  – lighter
+    fig.add_trace(go.Scatter(
+        x=np.concatenate([x_grid, x_grid[::-1]]),
+        y=np.concatenate([y_hi_2, y_lo_2[::-1]]),
+        fill='toself',
+        fillcolor='rgba(35, 86, 137, 0.15)',
+        line=dict(width=0),
+        hoverinfo='skip',
+        name='±2 standard deviation'
+    ))
+    # inner ribbon (±1 SD)  – darker, on top
+    fig.add_trace(go.Scatter(
+        x=np.concatenate([x_grid, x_grid[::-1]]),
+        y=np.concatenate([y_hi_1, y_lo_1[::-1]]),
+        fill='toself',
+        fillcolor='rgba(35, 86, 137, 0.30)',
+        line=dict(width=0),
+        hoverinfo='skip',
+        name='±1 standard deviation'
+    ))
+    fig.update_layout(
+        xaxis=dict(
+            title='Median household income (USD)',
+            showline=True,
+            linewidth=2,
+            linecolor='black',
+            showgrid=False,
+            ticks='outside',
+            tickformat=',',
+            range=extend_and_round_range([x_min, x_max], extension_percent=0.05),
+            zeroline=False,
+            nticks=10,
+        ),
+        yaxis=dict(
+            title='Travel time<br>estimation error (s)',
+            showline=True,
+            linewidth=2,
+            linecolor='black',
+            showgrid=False,
+            ticks='outside',
+            tickformat=',',
+            range=[-2000, 1000],
+            zeroline=False,
+        ),
+        legend=dict(
+            x=0.98, y=0.01,
+            xanchor='right',
+            yanchor='bottom',
+        ),
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+    )
+    fig = layout(fig)
+    fig.update_layout(width=570, height=475)
+    # fig.show(renderer="browser")
+    fig.show(renderer="notebook")
+    # fig.write_image(
+    #     f"./manuscripts/figs/line_sensitivity_w_shade.png", engine="orca",
+    #     width=570, height=475, scale=3.125
+    # )
+
+
+def line_w_flood_tuned(model_list, demo_idx, x_range, name_list):
+    import numpy as np
+
+    color_list = ['#3F6F8C', '#E7A25C', '#E3744B', '#D14039']
+    dash_list = ['solid', 'dash', 'dash', 'dash']
+
+    x_min, x_max = x_range[0], x_range[1]
+    x_grid = np.linspace(x_min, x_max, 10)
+
+    coefs = np.array([[m.betas[demo_idx, 0], m.betas[0, 0]] for m in model_list])
+    slopes = coefs[:, 0][:, None]
+    intercepts = coefs[:, 1][:, None]
+
+    fig = go.Figure()
+    fig.add_hline(y=0, line_width=1)
+    for slope_i, intercept_i, name_i, color_i, dash_i in zip(slopes, intercepts, name_list, color_list, dash_list):
+        fig.add_trace(
+            go.Scatter(
+                x=x_grid,
+                y=slope_i * x_grid + intercept_i,
+                mode='lines',
+                line=dict(width=2.5, color=color_i, dash=dash_i),
+                name=name_i,
+                showlegend=True,
+            )
+        )
+    fig.update_layout(
+        xaxis=dict(
+            title='Median household income (USD)',
+            showline=True,
+            linewidth=2,
+            linecolor='black',
+            showgrid=False,
+            ticks='outside',
+            tickformat=',',
+            range=extend_and_round_range([x_min, x_max], extension_percent=0.05),
+            zeroline=False,
+            nticks=10,
+        ),
+        yaxis=dict(
+            title='Travel time<br>estimation error (s)',
+            showline=True,
+            linewidth=2,
+            linecolor='black',
+            showgrid=False,
+            ticks='outside',
+            tickformat=',',
+            range=[-700, 50],
+            zeroline=False,
+        ),
+        legend=dict(
+            x=0.98, y=0.01,
+            xanchor='right',
+            yanchor='bottom',
+        ),
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+    )
+    fig = layout(fig)
+    fig.update_layout(width=570, height=475)
+    # fig.show(renderer="browser")
+    fig.show(renderer="notebook")
+    # fig.write_image(
+    #     f"./manuscripts/figs/line_sensitivity_w_flood_tuned.png", engine="orca",
+    #     width=570, height=475, scale=3.125
+    # )
+
+
 def scatter_demo_vs_error(
         df, xaxis, yaxis='Travel time<br>estimation error (s)',
         reg_line=None, color='#3F6F8C', size=17.5,
@@ -233,8 +392,8 @@ def scatter_demo_vs_error(
     )
     fig = layout(fig)
     fig.update_layout(width=570, height=475)
-    # fig.show(renderer="browser")
-    fig.show(renderer="notebook")
+    fig.show(renderer="browser")
+    # fig.show(renderer="notebook")
     if save_label is not None:
         if reg_line is not None:
             p_label = 'f'
