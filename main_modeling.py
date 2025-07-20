@@ -383,6 +383,20 @@ def calculate_all_routes(op, **kwargs):
             rescue_sta, road_segment, if_do_normal=False,
         )
 
+    elif op == 7:
+        # OP7: sensitivity analysis by moving flood peak
+        road_segment = pp_r.import_road_seg_w_inundation_info(
+            dir_road_inundated, speed_assigned, peak_shift=kwargs['peak_shift']
+        )
+        route_analysis = mo.RouteAnalysis(
+            icd, 'Number_nearest',
+            mode_label=f"_{'later' if (tp := kwargs['peak_shift']) > 0 else 'earlier'}{abs(int(tp))}"
+        )
+        route_analysis.run_route_analysis_arcgis(
+            geodatabase_addr, fd_name, nd_name, nd_layer_name,
+            rescue_sta, road_segment, if_do_normal=False,
+        )
+
 
 if __name__ == "__main__":
 
@@ -433,5 +447,12 @@ if __name__ == "__main__":
     # calculate_all_routes(op=6, tune_percent=-.05)
     # calculate_all_routes(op=6, tune_percent=-.10)
     # calculate_all_routes(op=6, tune_percent=-.15)
+
+    # calculate_all_routes(op=7, peak_shift=-1)
+    # calculate_all_routes(op=7, peak_shift=-2)
+    # calculate_all_routes(op=7, peak_shift=1)
+    # calculate_all_routes(op=7, peak_shift=2)
+    # calculate_all_routes(op=7, peak_shift=3)
+    # calculate_all_routes(op=7, peak_shift=4)
 
     print('End of the program.')

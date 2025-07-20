@@ -168,7 +168,7 @@ def scatter_demo_vs_error_w_period(
     fig.show(renderer="browser")
 
 
-def line_w_shade(model_list, demo_idx, x_range):
+def line_w_shade(model_list, demo_idx, x_range, label):
     import numpy as np
 
     x_min, x_max = x_range[0], x_range[1]
@@ -254,16 +254,17 @@ def line_w_shade(model_list, demo_idx, x_range):
     # fig.show(renderer="browser")
     fig.show(renderer="notebook")
     # fig.write_image(
-    #     f"./manuscripts/figs/line_sensitivity_w_shade.png", engine="orca",
+    #     f"./manuscripts/figs/line_sensitivity_w_shade_{label}.png", engine="orca",
     #     width=570, height=475, scale=3.125
     # )
 
 
-def line_w_flood_tuned(model_list, demo_idx, x_range, name_list):
+def line_w_flood_tuned(
+        model_list, demo_idx, x_range, name_list, label,
+        color_list=['#3F6F8C', '#E7A25C', '#E3744B', '#D14039'],
+        dash_list=['solid', 'dash', 'dash', 'dash']
+):
     import numpy as np
-
-    color_list = ['#3F6F8C', '#E7A25C', '#E3744B', '#D14039']
-    dash_list = ['solid', 'dash', 'dash', 'dash']
 
     x_min, x_max = x_range[0], x_range[1]
     x_grid = np.linspace(x_min, x_max, 10)
@@ -322,7 +323,7 @@ def line_w_flood_tuned(model_list, demo_idx, x_range, name_list):
     # fig.show(renderer="browser")
     fig.show(renderer="notebook")
     # fig.write_image(
-    #     f"./manuscripts/figs/line_sensitivity_w_flood_tuned.png", engine="orca",
+    #     f"./manuscripts/figs/line_sensitivity_w_flood_tuned_{label}.png", engine="orca",
     #     width=570, height=475, scale=3.125
     # )
 
