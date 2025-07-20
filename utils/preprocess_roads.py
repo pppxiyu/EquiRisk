@@ -505,10 +505,57 @@ class InundationToSpeed:
         return speed_series
 
 
+def shift_peak(df: pd.DataFrame, shift: int = 1, peak_col: str = "max_depth_32",) -> pd.DataFrame:
+    import numpy as np
+    import pandas as pd
+    from scipy.interpolate import PchipInterpolator
+    """
+    Move the common peak one column to the right for every row
+    (prefix stretch + suffix compress) while treating NaNs as zeros.
+
+    Parameters
+    ----------
+    df        : input DataFrame, rows = curves, columns = time points
+    peak_col  : column whose index is the (unique) peak for *all* rows
+    shift     : how many steps to move the peak (default 1)
+
+    Returns
+    -------
+    new_df    : DataFrame with the same shape/index/columns
+    """
+    n_cols = df.shape[1]
+    peak_idx = df.columns.get_loc(peak_col)
+    q = peak_idx + shift
+    if q >= n_cols:
+        raise ValueError("Shift pushes the peak outside the series")
+
+    # --- build the warping grid ONCE -----------------------------------------
+    t = np.arange(n_cols, dtype=float)
+    beta = peak_idx / q
+    alpha = (n_cols - 1 - peak_idx) / (n_cols - 1 - q)
+
+    t_old = t.copy()
+    left = t <= q
+    t_old[left] = beta * t[left]
+    t_old[~left] = peak_idx + alpha * (t[~left] - q)  # compress suffix
+
+    # -------------------------------------------------------------------------
+    def _warp_one(row: pd.Series) -> np.ndarray:
+        y = np.nan_to_num(row.to_numpy(dtype=float), nan=0.0)
+        # If the row is constant (all zeros or one flat value), no need to warp
+        if np.allclose(y, y[0]):
+            return y
+        f = PchipInterpolator(t, y)   # shape‑preserving, no wiggles
+        return f(t_old)
+
+    warped_values = np.vstack(df.apply(_warp_one, axis=1).to_numpy())
+    return pd.DataFrame(warped_values, columns=df.columns, index=df.index)
+
+
 def import_road_seg_w_inundation_info(
         dir_road_inundated, speed_assigned,
         VDOT_speed=None, VDOT_speed_col=None, osm_match_vdot=None,
-        amplify: float|None=None,
+        amplify: float|None=None, peak_shift: int|None=None,
 ):
     """
     Import road segments with inundation information and calculate travel times.
@@ -528,6 +575,16 @@ def import_road_seg_w_inundation_info(
     if amplify is not None:
         cols_to_multiply = road_segment_inundation.filter(regex=r'^(max|mean)_depth_\d+$').columns
         road_segment_inundation[cols_to_multiply] = road_segment_inundation[cols_to_multiply] * (1 + amplify)
+
+    if peak_shift is not None:
+        cols_to_shift = road_segment_inundation.filter(regex=r'^(max)_depth_\d+$').columns
+        road_segment_inundation[cols_to_shift] = shift_peak(
+            road_segment_inundation[cols_to_shift], shift=peak_shift, peak_col='max_depth_32'
+        )
+        cols_to_shift = road_segment_inundation.filter(regex=r'^(mean)_depth_\d+$').columns
+        road_segment_inundation[cols_to_shift] = shift_peak(
+            road_segment_inundation[cols_to_shift], shift=peak_shift, peak_col='mean_depth_32'
+        )
 
     road_segment_inundation = add_roads_max_speed(
         road_segment_inundation, speed_assigned,

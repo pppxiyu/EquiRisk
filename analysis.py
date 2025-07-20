@@ -84,6 +84,19 @@ def calculate_incidents_with_gis_travel_time(op, **kwargs):
             icd, f"{dir_inaccessible_routes}_{'p' if (tp := kwargs['tune_percent']) > 0 else 'm'}{abs(int(tp * 100))}.json"
         )
 
+    if op == 7:
+        # OP7: sensitivity analysis by moving the peak
+        icd = pp_i.convert_feature_class_to_df(
+            icd,
+            f'{geodatabase_addr}/route_results',
+            list(range(list(period_dict.values())[0], list(period_dict.values())[1] + 1)),
+            mode_label=f"_{'later' if (tp := kwargs['peak_shift']) > 0 else 'earlier'}{abs(int(tp))}",
+        )
+        icd = pp_i.add_inaccessible_routes(
+            icd,
+            f"{dir_inaccessible_routes}_{'later' if (tp := kwargs['peak_shift']) > 0 else 'earlier'}{abs(int(tp))}.json"
+        )
+
     return icd
 
 
