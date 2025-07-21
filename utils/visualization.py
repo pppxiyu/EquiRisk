@@ -1359,10 +1359,9 @@ def scatter_income_vs_congestion(df_list_d, df_list_c, mode='disrupted_net', exp
     return
 
 
-def box_income_vs_congestion(df_list, y_axis_top=205, box_color='#992F87', label=None):
+def violin_income_vs_congestion(df_list, y_axis_top=105, box_color='#992F87', label=None):
     import pandas as pd
     import numpy as np
-
 
     df = pd.concat(df_list, axis=0, ignore_index=True)
 
@@ -1379,11 +1378,17 @@ def box_income_vs_congestion(df_list, y_axis_top=205, box_color='#992F87', label
     df['income_k_bin'] = pd.cut(df['income_k'], bins=bin_edges)
     df['income_k_mid'] = df['income_k_bin'].apply(lambda x: (x.left + x.right) / 2)
 
-    fig = px.box(
+    # fig = px.box(
+    #     df, x='income_k_mid', y='congestion', points='outliers',
+    #     labels={'income_k_mid': 'Median household income (thousand USD)',
+    #             'congestion': 'Travel time increase (%)'},
+    #     color_discrete_sequence=[box_color],    # ['#1B91BF', '#235689']
+    # )
+    fig = px.violin(
         df, x='income_k_mid', y='congestion', points='outliers',
         labels={'income_k_mid': 'Median household income (thousand USD)',
                 'congestion': 'Travel time increase (%)'},
-        color_discrete_sequence=[box_color],    # ['#1B91BF', '#235689']
+        color_discrete_sequence=[box_color], # box=True
     )
     tick_vals = bin_edges
     tick_texts = [str(int(val)) for val in tick_vals]
@@ -1424,18 +1429,23 @@ def box_income_vs_congestion(df_list, y_axis_top=205, box_color='#992F87', label
         width=300, height=600,
         margin=dict(l=50, r=50, t=50, b=50)
     )
+    # for trace in fig.data:
+    #     if trace.type == 'box':
+    #         trace.line.width = 1
+    #         trace.marker.size = 4
+    #         trace.width = 16
     for trace in fig.data:
-        if trace.type == 'box':
+        if trace.type == 'violin':
             trace.line.width = 1
             trace.marker.size = 4
             trace.width = 16
 
-    # fig.show(renderer="browser")
-    fig.show(renderer="notebook")
-    # fig.write_image(
-    #     f"./manuscripts/figs/box_income_congestion_{label}.png", engine="orca",
-    #     width=300, height=600, scale=3.125
-    # )
+    fig.show(renderer="browser")
+    # fig.show(renderer="notebook")
+    fig.write_image(
+        f"./manuscripts/figs/violin_income_congestion_{label}.png", engine="orca",
+        width=300, height=600, scale=3.125
+    )
     return
 
 
