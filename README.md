@@ -40,10 +40,12 @@ Running this script requires access to ArcGIS Pro 3.
 Computation in most of the cells should be finished within at most several minutes.
 The major expected results have been included in the notebook.
 
-- `main_analysis.ipynb` is too large to display on GitHub. It is recommended to 
-enter the notebook [address](https://github.com/pppxiyu/EquiRisk/blob/main/main_analysis.ipynb) into [nbviewer](https://nbviewer.org/) to render the notebook.
+- `main_analysis.ipynb` is too large to display on GitHub. It is recommended to use 
+ [Google Colab](https://colab.research.google.com/) to render the notebook. Please click "Open notebook" under "File",
+and paste the address of the [notebook](https://github.com/pppxiyu/EquiRisk/blob/main/main_analysis.ipynb) 
+under the "GitHub" menu.
 
-The `utils` folder contains code for data preprocessing, regression analysis, and visualization.
+- The `utils` folder contains code for data preprocessing, regression analysis, and visualization.
 
 - Data preprocessing modules:
   - `preprocess_incidents.py`: processes EMS incident data
