@@ -3,11 +3,103 @@ import numpy as np
 from pysal.model import spreg
 from pysal.lib import weights
 import math
+from scipy import stats
+import statsmodels.formula.api as smf
+from pysal.explore import esda
+import geopandas as gpd
+
+
+
+def calculate_morans_i(gdf: gpd.GeoDataFrame, column_name: str, weight_method: str = 'Queen', k: int = None):
+    """
+    Calculates Moran's I for a given GeoDataFrame column using a specified spatial weighting strategy.
+
+    Args:
+        gdf (gpd.GeoDataFrame): The input GeoDataFrame.
+        column_name (str): The name of the column in the GeoDataFrame for which to calculate Moran's I.
+        weight_method (str, optional): The spatial weights method to use.
+                                       Supported methods: 'Queen', 'Rook', 'KNN'. Defaults to 'Queen'.
+        k (int, optional): The number of nearest neighbors for 'KNN' weighting method.
+                           Required if `weight_method` is 'KNN'. Defaults to None.
+
+    Returns:
+        pysal.explore.esda.Moran: The Moran's I object containing the calculated statistics.
+
+    Raises:
+        ValueError: If the specified column_name is not found in the GeoDataFrame.
+        ValueError: If an unsupported weight_method is provided.
+        ValueError: If 'KNN' method is chosen but 'k' is not specified.
+    """
+    if column_name not in gdf.columns:
+        raise ValueError(f"Column '{column_name}' not found in the GeoDataFrame.")
+
+    # Build spatial weights matrix
+    w = None
+    if weight_method == 'Queen':
+        w = weights.Queen.from_dataframe(gdf, silence_warnings=True)
+    elif weight_method == 'Rook':
+        w = weights.Rook.from_dataframe(gdf, silence_warnings=True)
+    elif weight_method == 'KNN':
+        if k is None:
+            raise ValueError("For 'KNN' weight_method, 'k' (number of neighbors) must be specified.")
+        w = weights.KNN.from_dataframe(gdf, k=k, silence_warnings=True)
+    else:
+        raise ValueError(f"Unsupported weight_method: '{weight_method}'. Choose from 'Queen', 'Rook', 'KNN'.")
+
+    # Calculate Moran's I
+    moran = esda.Moran(gdf[column_name], w)
+
+    return moran
+
+
+def reg_ols(df, x_name, y_name, summary=True, return_residuals=False):
+    """
+    Runs an Ordinary Least Squares (OLS) linear regression.
+
+    Args:
+        df (pd.DataFrame): The input DataFrame containing the data.
+        x_name (str): The name of the independent variable column in df.
+        y_name (str): The name of the dependent variable column in df.
+        summary (bool): Whether to print the regression summary. Defaults to True.
+        return_residuals (bool): Whether to return the residual errors. Defaults to False.
+
+    Returns:
+        statsmodels.regression.linear_model.RegressionResultsWrapper: The OLS regression results object.
+        pd.DataFrame (optional): The original DataFrame with a new 'residuals' column,
+                                 if `return_residuals` is True.
+
+    Raises:
+        ValueError: If the specified independent or dependent variable column is not found in the DataFrame.
+    """
+    # Ensure the columns exist in the DataFrame
+    if x_name not in df.columns:
+        raise ValueError(f"Independent variable '{x_name}' not found in DataFrame.")
+    if y_name not in df.columns:
+        raise ValueError(f"Dependent variable '{y_name}' not found in DataFrame.")
+
+    # Drop rows with NaN values in the relevant columns to avoid errors in regression
+    df_clean = df[[y_name, x_name]].dropna()
+
+    # Construct the formula string and run the OLS regression
+    formula = f"{y_name} ~ {x_name}"
+    model = smf.ols(formula=formula, data=df_clean).fit()
+
+    if summary:
+        print(model.summary())
+
+    if return_residuals:
+        # Create a copy of the original DataFrame to add residuals to
+        df_with_residuals = df.copy()
+        # Align residuals with the original DataFrame's index
+        df_with_residuals.loc[df_clean.index, 'residuals'] = model.resid
+        return model, df_with_residuals
+    else:
+        return model
 
 
 def reg_spatial_lag(
         df, weight_method='Queen', k=None,
-        x='demographic_value', y='diff_travel', w_lag=1, summary=True, spillover=False,
+        x='demographic_value', y='diff_travel', w_lag=1, summary=True, spillover=False, method='ord', slx_lags=0
 ):
     """
     Run a spatial lag regression using PySAL.
@@ -33,7 +125,8 @@ def reg_spatial_lag(
         name_y=y,
         name_x=[x],
         w=m,
-        method='ord',
+        method=method,
+        slx_lags=slx_lags,
     )
     if summary:
         print(reg.summary)
@@ -263,3 +356,159 @@ def reg_shift_test_bootstrapping(
     print(f'Mean value is {diff_array.mean()}, std is {diff_array.std()}')
     print(f'p-value {1 - p}')
     return
+
+
+def ztest_mean_test(
+    series_a: pd.Series,
+    series_b: pd.Series,
+    pop_std_a: float, # Known population standard deviation for Series A
+    pop_std_b: float, # Known population standard deviation for Series B
+    alpha: float = 0.05,
+    alternative: str = 'two-sided'
+) -> tuple[bool, float, float]:
+    """
+    Performs a Z-test for two independent means with known population standard deviations.
+
+    Null Hypothesis (H0): mean(Series A) == mean(Series B)
+    Alternative Hypothesis (H1):
+        - 'two-sided': mean(Series A) != mean(Series B)
+        - 'smaller': mean(Series A) < mean(Series B)
+        - 'larger': mean(Series A) > mean(Series B)
+
+    Args:
+        series_a (pd.Series): The first pandas Series.
+        series_b (pd.Series): The second pandas Series.
+        pop_std_a (float): The known population standard deviation for Series A.
+        pop_std_b (float): The known population standard deviation for Series B.
+        alpha (float): The significance level (e.g., 0.05 for 5%).
+        alternative (str): The alternative hypothesis. Must be 'two-sided', 'smaller', or 'larger'.
+
+    Returns:
+        tuple: A tuple containing:
+            - bool: True if the null hypothesis is rejected (i.e., the result is statistically significant),
+                    False otherwise.
+            - float: The p-value for the test.
+            - float: The Z-statistic.
+
+    Raises:
+        ValueError: If an invalid 'alternative' string is provided.
+    """
+    if alternative not in ['two-sided', 'smaller', 'larger']:
+        raise ValueError("Alternative must be 'two-sided', 'smaller', or 'larger'.")
+
+    # Calculate sample means
+    mean_a = series_a.mean()
+    mean_b = series_b.mean()
+
+    # Calculate sample sizes
+    n_a = len(series_a)
+    n_b = len(series_b)
+
+    # Calculate the standard error of the difference in means
+    # Formula: sqrt((sigma_a^2 / n_a) + (sigma_b^2 / n_b))
+    se_diff = np.sqrt((pop_std_a**2 / n_a) + (pop_std_b**2 / n_b))
+
+    # Calculate the Z-statistic
+    # Formula: (mean_a - mean_b) / se_diff
+    z_statistic = (mean_a - mean_b) / se_diff
+
+    # Calculate the p-value based on the alternative hypothesis
+    if alternative == 'two-sided':
+        # For two-sided, we take the absolute Z-value and multiply the tail probability by 2
+        p_value = 2 * stats.norm.cdf(-np.abs(z_statistic))
+    elif alternative == 'smaller': # H1: mean(A) < mean(B)
+        # We are interested in the left tail probability
+        p_value = stats.norm.cdf(z_statistic)
+    elif alternative == 'larger': # H1: mean(A) > mean(B)
+        # We are interested in the right tail probability (survival function)
+        p_value = stats.norm.sf(z_statistic)
+
+    is_significant = p_value < alpha
+
+    return is_significant, p_value, z_statistic
+
+
+def bootstrap_spatial_inequity(
+    df_real, 
+    y_real='TravelTime', 
+    df_est=None, 
+    y_est='Total_Seconds', 
+    x_var='demographic_value',
+    iterations=500,
+    conf_interval=95
+):
+    """
+    Improved spatial bootstrap supporting two DataFrames and dynamic columns.
+    
+    Args:
+        df_real (pd.DataFrame): DF containing the ground-truth target.
+        y_real (str): Column name for real-world travel time.
+        df_est (pd.DataFrame, optional): DF for estimated target. If None, uses df_real.
+        y_est (str): Column name for estimated travel time.
+        x_var (str): Independent variable (income/demographics).
+        iterations (int): Number of bootstrap samples.
+        conf_interval (int): CI level (e.g., 95).
+    """
+    if df_est is None:
+        df_est = df_real
+
+    ratios = []
+    valid_inequity_count = 0
+    
+    # Calculate alpha for percentiles
+    lower_p = (100 - conf_interval) / 2
+    upper_p = 100 - lower_p
+
+    print(f"Starting bootstrap for {iterations} iterations on n={len(df_real)} observations...")
+
+    for i in range(iterations):
+        # 1. Generate bootstrap indices (consistent across both DFs)
+        indices = np.random.choice(df_real.index, size=len(df_real), replace=True)
+        
+        boot_real = df_real.loc[indices].reset_index(drop=True)
+        boot_est = df_est.loc[indices].reset_index(drop=True)
+
+        try:
+            # 2. Run Real-world model
+            res_real = reg_spatial_lag(boot_real, y=y_real, x=x_var, summary=False)
+            beta_real = res_real.betas[1][0]
+            
+            # 3. Run Estimate model
+            res_est = reg_spatial_lag(boot_est, y=y_est, x=x_var, summary=False)
+            beta_est = res_est.betas[1][0]
+            
+            # 4. Calculate Ratio
+            ratio = beta_est / beta_real
+            
+            # Directional Filter: Only count if both show 'inequity' (negative coefficient)
+            if beta_est < 0 and beta_real < 0:
+                ratios.append(ratio)
+                valid_inequity_count += 1
+            
+        except Exception as e:
+            # Catch linear algebra errors or singular matrices
+            continue
+            
+        if (i + 1) % 100 == 0:
+            print(f"Iteration {i + 1} complete...")
+
+    # 5. Safety check if no ratios were collected
+    if not ratios:
+        print("Error: No iterations produced dual-negative coefficients. Check your data.")
+        return None, None
+
+    # 6. Calculate Stats
+    lower_bound = np.percentile(ratios, lower_p)
+    upper_bound = np.percentile(ratios, upper_p)
+    mean_ratio = np.mean(ratios)
+
+    print("\n" + "="*30)
+    print("      BOOTSTRAP RESULTS      ")
+    print("="*30)
+    print(f"Valid 'Inequity' Samples: {valid_inequity_count}/{iterations}")
+    print(f"Mean Capture Ratio:   {mean_ratio:.4f}")
+    print(f"{conf_interval}% CI:              [{lower_bound:.4f}, {upper_bound:.4f}]")
+    print("="*30)
+    
+    return
+
